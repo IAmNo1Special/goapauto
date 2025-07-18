@@ -1,4 +1,4 @@
-# Revomon GOAP Planner
+# GOAP Planner
 
 A flexible Goal-Oriented Action Planning (GOAP) system designed for game AI, but applicable to any planning problem. This implementation provides a clean, modular architecture for defining actions, goals, and world states to create intelligent AI behaviors.
 
@@ -13,15 +13,16 @@ A flexible Goal-Oriented Action Planning (GOAP) system designed for game AI, but
 
 ## Installation
 
+### From PyPI
+```bash
+uv add goapauto
+```
+
+### From Source
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/revomon-goap.git
-   cd revomon-goap
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
+   git clone https://github.com/IAmNo1Special/goapauto.git
+   cd goapauto
    ```
 
 ## Quick Start
