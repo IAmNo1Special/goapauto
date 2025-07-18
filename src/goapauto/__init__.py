@@ -42,7 +42,7 @@ from .models.goal import Goal
 from .models.actions import Action, Actions
 from .models.worldstate import WorldState
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = [
     'Planner',
     'Goal',

@@ -1,7 +1,15 @@
 [project]
 name = "goapauto"
-version = "0.1.0"
+version = "0.1.1"
 description = "A flexible Goal-Oriented Action Planning (GOAP) system for game AI and planning problems, featuring A* search, efficient state management, and modular design."
 readme = "README.md"
-requires-python = ">=3.13"
+authors = [
+    { name = "Malcom Godlike", email = "ivmno1special@gmail.com" }
+]
+requires-python = "==3.13.*"
 dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
