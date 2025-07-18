@@ -1,0 +1,7 @@
+[project]
+name = "goapauto"
+version = "0.1.0"
+description = "A flexible Goal-Oriented Action Planning (GOAP) system for game AI and planning problems, featuring A* search, efficient state management, and modular design."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
