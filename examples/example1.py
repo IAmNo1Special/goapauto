@@ -7,6 +7,12 @@ and demonstrates how to generate and execute plans to achieve goals.
 import logging
 from typing import Dict, Any, List, Tuple
 
+import sys
+from pathlib import Path
+
+# Add the parent directory to the Python path
+sys.path.append(str(Path(__file__).parent.parent))
+
 from models.goap_planner import Planner
 from models.goal import Goal
 

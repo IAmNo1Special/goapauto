@@ -10,6 +10,12 @@ import logging
 from typing import Dict, Any, List, Tuple
 from datetime import datetime, time
 
+import sys
+from pathlib import Path
+
+# Add the parent directory to the Python path
+sys.path.append(str(Path(__file__).parent.parent))
+
 from models.goap_planner import Planner
 from models.goal import Goal
 
