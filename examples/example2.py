@@ -165,6 +165,11 @@ def main() -> int:
         
         # Generate the plan
         plan_result = planner.generate_plan(initial_state, goal)
+
+        # Print the plan
+        print("Plan:")
+        for action in plan_result.plan:
+            print(f"- {action.name}")
         
     except Exception as e:
         logger.exception("An error occurred during planning")
