@@ -13,8 +13,7 @@ from pathlib import Path
 # Add the parent directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from models.goap_planner import Planner
-from models.goal import Goal
+from goapauto import Planner, PlanResult, Goal
 
 # Configure logging - only show WARNING and above
 logging.basicConfig(
