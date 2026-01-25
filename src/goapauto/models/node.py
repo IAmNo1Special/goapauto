@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 from goapauto.models.actions import Action
 from goapauto.models.goal import Goal
@@ -34,6 +34,9 @@ class Node:
         parent: Optional[Node],
         goal: Union[Goal, Dict[str, Any]],
         action: Optional[Action] = None,
+        heuristic_fn: Optional[
+            Callable[[WorldState, Union[Goal, Dict[str, Any]]], float]
+        ] = None,
     ) -> None:
         """Initialize a new Node in the search tree.
 
@@ -42,9 +45,7 @@ class Node:
             parent: The parent node (None for root)
             goal: The goal being pursued (Goal object or dict)
             action: The action that led to this node (None for root)
-
-        Raises:
-            TypeError: If state is not a WorldState or goal is invalid
+            heuristic_fn: Optional custom heuristic function
         """
         if not isinstance(state, WorldState):
             raise TypeError(f"state must be a WorldState, got {type(state)}")
@@ -53,12 +54,16 @@ class Node:
         self.parent = parent
         self.goal = goal
         self.action = action
+        self.heuristic_fn = heuristic_fn
 
         # Calculate g-score (cost from start to current node)
         self.g_score = self._calculate_g_score(parent, action)
 
         # Calculate h-score (heuristic estimate to goal)
-        self.h_score = self.heuristic(state, goal)
+        if heuristic_fn:
+            self.h_score = heuristic_fn(state, goal)
+        else:
+            self.h_score = self.heuristic(state, goal)
 
         # Calculate f-score (total score for A*)
         self.f_score = self.g_score + self.h_score
