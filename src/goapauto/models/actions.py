@@ -1,10 +1,126 @@
-import copy
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="Action")
+
+
+class Predicate(BaseModel, ABC):
+    """Base class for state predicates.
+
+    Predicates are used in preconditions to check if a state value
+    meets certain criteria.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    @abstractmethod
+    def __call__(self, value: Any) -> bool:
+        """Evaluate the predicate against a value."""
+        pass
+
+
+class Equal(Predicate):
+    """Predicate that checks if a value is equal to another."""
+
+    value: Any
+
+    def __call__(self, other: Any) -> bool:
+        return other == self.value
+
+    def __str__(self) -> str:
+        return f"== {self.value}"
+
+
+class NotEqual(Predicate):
+    """Predicate that checks if a value is not equal to another."""
+
+    value: Any
+
+    def __call__(self, other: Any) -> bool:
+        return other != self.value
+
+    def __str__(self) -> str:
+        return f"!= {self.value}"
+
+
+class GreaterThan(Predicate):
+    """Predicate that checks if a value is greater than another."""
+
+    value: Union[int, float]
+
+    def __call__(self, other: Any) -> bool:
+        return other > self.value
+
+    def __str__(self) -> str:
+        return f"> {self.value}"
+
+
+class LessThan(Predicate):
+    """Predicate that checks if a value is less than another."""
+
+    value: Union[int, float]
+
+    def __call__(self, other: Any) -> bool:
+        return other < self.value
+
+    def __str__(self) -> str:
+        return f"< {self.value}"
+
+
+class Effect(BaseModel, ABC):
+    """Base class for state effects.
+
+    Effects are used to define how a state attribute changes
+    when an action is applied.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    @abstractmethod
+    def __call__(self, current_value: Any) -> Any:
+        """Compute the new value based on the current value."""
+        pass
+
+
+class Set(Effect):
+    """Effect that sets an attribute to a specific value."""
+
+    value: Any
+
+    def __call__(self, current_value: Any) -> Any:
+        return self.value
+
+    def __str__(self) -> str:
+        return f"= {self.value}"
+
+
+class Increment(Effect):
+    """Effect that increments a numeric attribute."""
+
+    amount: Union[int, float] = 1
+
+    def __call__(self, current_value: Any) -> Any:
+        return current_value + self.amount
+
+    def __str__(self) -> str:
+        return f"+= {self.amount}"
+
+
+class Decrement(Effect):
+    """Effect that decrements a numeric attribute."""
+
+    amount: Union[int, float] = 1
+
+    def __call__(self, current_value: Any) -> Any:
+        return current_value - self.amount
+
+    def __str__(self) -> str:
+        return f"-= {self.amount}"
 
 
 @dataclass
@@ -19,8 +135,8 @@ class Action:
     """
 
     name: str
-    preconditions: Dict[str, Any]
-    effects: Dict[str, Any]
+    preconditions: Dict[str, Union[Any, Predicate, Callable[[Any], bool]]]
+    effects: Dict[str, Union[Any, Effect, Callable[[Any], Any]]]
     cost: int = 1
 
     def __post_init__(self) -> None:
@@ -43,33 +159,31 @@ class Action:
         Returns:
             bool: True if all preconditions are met, False otherwise
         """
-        if not hasattr(state, "__dict__"):
-            raise TypeError("State must be an object with attributes")
-
         logger.debug("Checking applicability of action: %s", self.name)
         try:
-            for attr, expected_value in self.preconditions.items():
+            for attr, expected in self.preconditions.items():
                 if not hasattr(state, attr):
                     logger.debug("State missing required attribute: %s", attr)
                     return False
 
                 current_value = getattr(state, attr)
 
-                # Handle callable preconditions (e.g., lambdas)
-                if callable(expected_value):
-                    if not expected_value(current_value):
+                # Handle Predicate objects or other callables
+                if callable(expected):
+                    if not expected(current_value):
                         logger.debug(
-                            "Callable precondition for %s returned False (value: %s)",
+                            "Precondition failed for %s: %s(%s) is False",
                             attr,
+                            expected,
                             current_value,
                         )
                         return False
                 # Handle direct value comparison
-                elif current_value != expected_value:
+                elif current_value != expected:
                     logger.debug(
                         "Precondition not met: %s != %s",
                         current_value,
-                        expected_value,
+                        expected,
                     )
                     return False
             return True
@@ -87,9 +201,6 @@ class Action:
 
         Returns:
             A new state with the action's effects applied
-
-        Raises:
-            ValueError: If the action cannot be applied to the current state
         """
         if not self.is_applicable(state):
             raise ValueError(
@@ -98,18 +209,19 @@ class Action:
 
         logger.info("Applying action: %s", self.name)
         try:
-            # Create a deep copy to avoid modifying the original state
-            new_state = copy.deepcopy(state)
+            # Create a copy of the state
+            # WorldState (Pydantic) has a copy() method
+            new_state = state.copy(deep=True)
 
             # Apply each effect to the new state
-            for attr, value in self.effects.items():
-                if callable(value):
-                    # For callable effects, pass the current state to the function
-                    # Note: We pass the ORIGINAL state, not new_state, to ensure
-                    # atomic updates based on the state before action
-                    setattr(new_state, attr, value(state))
+            for attr, effect in self.effects.items():
+                if callable(effect):
+                    # For callable effects (including Effect objects),
+                    # pass the current attribute value
+                    current_val = getattr(state, attr)
+                    setattr(new_state, attr, effect(current_val))
                 else:
-                    setattr(new_state, attr, value)
+                    setattr(new_state, attr, effect)
 
             logger.debug("New state after %s: %s", self.name, new_state)
             return new_state
@@ -117,6 +229,47 @@ class Action:
         except Exception as e:
             logger.error(
                 "Failed to apply action %s: %s", self.name, str(e), exc_info=True
+            )
+            raise
+
+    async def async_apply(self, state: Any) -> Any:
+        """Asynchronously apply this action to the current state and return a new state.
+
+        Args:
+            state: The current world state to apply the action to
+
+        Returns:
+            A new state with the action's effects applied
+        """
+        if not self.is_applicable(state):
+            raise ValueError(
+                f"Action {self.name} is not applicable to the current state"
+            )
+
+        logger.info("Applying action asynchronously: %s", self.name)
+        try:
+            # Create a copy of the state
+            new_state = state.copy(deep=True)
+
+            # Apply each effect to the new state
+            for attr, effect in self.effects.items():
+                if callable(effect):
+                    current_val = getattr(state, attr)
+                    import inspect
+
+                    if inspect.iscoroutinefunction(effect):
+                        setattr(new_state, attr, await effect(current_val))
+                    else:
+                        setattr(new_state, attr, effect(current_val))
+                else:
+                    setattr(new_state, attr, effect)
+
+            logger.debug("New state after async %s: %s", self.name, new_state)
+            return new_state
+
+        except Exception as e:
+            logger.error(
+                "Failed to async apply action %s: %s", self.name, str(e), exc_info=True
             )
             raise
 

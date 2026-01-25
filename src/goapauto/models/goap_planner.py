@@ -116,165 +116,210 @@ class Planner:
             A tuple of (plan, message) where:
             - plan: List of action names, or None if no plan found
             - message: Status message describing the result
-
-        Raises:
-            TypeError: If world_state or goal are of invalid types
-            ValueError: If max_depth is not positive
         """
         import time
 
-        # Display goal information
-        print("\n" + "=" * 50)
-        print("GOAL-ORIENTED ACTION PLANNING")
-        print("=" * 50)
-        print(f"\nGOAL: {goal.name}")
-        print(f"TARGET STATE: {goal.target_state}\n")
-
+        self._print_header(goal)
         start_time = time.time()
-
-        # Reset stats
         self.stats = PlanStats()
 
-        # Input validation
-        if not isinstance(world_state, (dict, WorldState)):
-            raise TypeError(
-                f"world_state must be a dict or WorldState, got {type(world_state)}"
-            )
-
-        if not isinstance(goal, (dict, Goal)):
-            raise TypeError(f"goal must be a dict or Goal, got {type(goal)}")
-
-        if max_depth is not None and max_depth <= 0:
-            raise ValueError(f"max_depth must be positive, got {max_depth}")
-
-        # Convert inputs to proper types if needed
-        if isinstance(world_state, dict):
-            world_state = WorldState(world_state)
-
-        if isinstance(goal, dict):
-            goal = Goal(goal)
-
-        # Check if goal is already satisfied
-        if goal.is_satisfied(world_state):
-            self.stats.execution_time = time.time() - start_time
-            return [], "✅ Goal is already satisfied!"
-
         try:
-            # Get the plan using A* search
+            world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
+
+            if goal.is_satisfied(world_state):
+                self.stats.execution_time = time.time() - start_time
+                return [], "✅ Goal is already satisfied!"
+
             plan = self._find_plan(world_state, goal, max_depth)
-
-            # Update stats
-            self.stats.plan_length = len(plan) if plan else 0
-            self.stats.total_cost = sum(
-                self.actions.get_action(name).cost for name in plan or []
-            )
-            self.stats.execution_time = time.time() - start_time
-
-            safe_print("\n" + "=" * 50)
-            safe_print("PLAN GENERATION COMPLETE")
-            safe_print("=" * 50)
-
-            if plan:
-                message = f"[SUCCESS] Found plan with {len(plan)} actions (cost: {self.stats.total_cost:.1f})"
-                safe_print(f"\n{message}")
-                safe_print("\nPLAN STEPS:")
-                for i, action_name in enumerate(plan, 1):
-                    safe_print(f"  {i}. {action_name}")
-
-                self._display_statistics()
-                return plan, message
-
-            message = "❌ No valid plan found to achieve the goal."
-            print(f"\n{message}")
-            self._display_statistics()
-            return None, message
+            return self._finalize_plan_generation(plan, start_time)
 
         except Exception as e:
             logger.exception("Error during planning")
             return None, f"❌ Error during planning: {str(e)}"
 
-    def _find_plan(
-        self, world_state: WorldState, goal: Goal, max_depth: Optional[int]
-    ) -> Optional[Plan]:
-        """Internal method to find a plan using A* search.
+    async def async_generate_plan(
+        self,
+        world_state: Union[Dict[str, Any], WorldState],
+        goal: Union[Dict[str, Any], Goal],
+        max_depth: Optional[int] = None,
+    ) -> PlanResult:
+        """Asynchronously generate a plan.
 
         Args:
             world_state: The current state of the world
             goal: The goal to achieve
-            max_depth: Maximum search depth (None for no limit)
+            max_depth: Optional maximum depth for the search
 
         Returns:
-            List of action names representing the plan, or None if no plan found
+            A tuple of (plan, message)
         """
+        import time
+
+        self._print_header(goal)
+        start_time = time.time()
+        self.stats = PlanStats()
+
+        try:
+            world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
+
+            if goal.is_satisfied(world_state):
+                self.stats.execution_time = time.time() - start_time
+                return [], "✅ Goal is already satisfied!"
+
+            plan = await self._async_find_plan(world_state, goal, max_depth)
+            return self._finalize_plan_generation(plan, start_time)
+
+        except Exception as e:
+            logger.exception("Error during async planning")
+            return None, f"❌ Error during planning: {str(e)}"
+
+    def _print_header(self, goal: Goal) -> None:
+        """Print planning header information."""
+        print("\n" + "=" * 50)
+        print("GOAL-ORIENTED ACTION PLANNING")
+        print("=" * 50)
+        # Handle cases where goal might still be a dict during header print
+        name = getattr(goal, "name", str(goal))
+        target = getattr(goal, "target_state", goal)
+        print(f"\nGOAL: {name}")
+        print(f"TARGET STATE: {target}\n")
+
+    def _validate_and_convert(
+        self, world_state: Any, goal: Any, max_depth: Optional[int]
+    ) -> Tuple[WorldState, Goal]:
+        """Validate inputs and convert to proper types."""
+        if not isinstance(world_state, (dict, WorldState)):
+            raise TypeError(
+                f"world_state must be a dict or WorldState, got {type(world_state)}"
+            )
+        if not isinstance(goal, (dict, Goal)):
+            raise TypeError(f"goal must be a dict or Goal, got {type(goal)}")
+        if max_depth is not None and max_depth <= 0:
+            raise ValueError(f"max_depth must be positive, got {max_depth}")
+
+        if isinstance(world_state, dict):
+            world_state = WorldState(world_state)
+        if isinstance(goal, dict):
+            goal = Goal(goal)
+
+        return world_state, goal
+
+    def _finalize_plan_generation(
+        self, plan: Optional[Plan], start_time: float
+    ) -> PlanResult:
+        """Finalize stats and print result message."""
+        import time
+
+        self.stats.plan_length = len(plan) if plan else 0
+        self.stats.total_cost = sum(
+            self.actions.get_action(name).cost for name in plan or []
+        )
+        self.stats.execution_time = time.time() - start_time
+
+        safe_print("\n" + "=" * 50)
+        safe_print("PLAN GENERATION COMPLETE")
+        safe_print("=" * 50)
+
+        if plan:
+            message = f"[SUCCESS] Found plan with {len(plan)} actions (cost: {self.stats.total_cost:.1f})"
+            safe_print(f"\n{message}")
+            safe_print("\nPLAN STEPS:")
+            for i, action_name in enumerate(plan, 1):
+                safe_print(f"  {i}. {action_name}")
+            self._display_statistics()
+            return plan, message
+
+        message = "❌ No valid plan found to achieve the goal."
+        print(f"\n{message}")
+        self._display_statistics()
+        return None, message
+
+    def _find_plan(
+        self, world_state: WorldState, goal: Goal, max_depth: Optional[int]
+    ) -> Optional[Plan]:
+        """Internal method to find a plan using A* search."""
         logger.info("Planning to achieve goal: %s", goal)
-        logger.debug("Current world state: %s", world_state)
 
-        # Check if goal is already satisfied
-        if goal.is_satisfied(world_state):
-            logger.info("Goal already satisfied")
-            return []
-
-        # Initialize data structures
         start_node = Node(world_state, None, goal)
-        frontier = []  # Priority queue
+        frontier = []
         heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
 
-        # Track visited states and their best known costs
         g_scores: Dict[StateKey, float] = {hash(world_state): 0}
-        came_from: Dict[StateKey, Node] = {}
-
         iteration = 0
 
         while frontier and (max_depth is None or iteration < self.max_iterations):
             iteration += 1
             self.stats.nodes_visited += 1
-
-            # Get the node with the lowest f_score
             _, _, current_node = heapq.heappop(frontier)
 
-            # Check if we've reached the goal
             if goal.is_satisfied(current_node.state):
                 return self._reconstruct_plan(current_node)
 
-            # Skip if we've already found a better path to this state
             current_state_key = hash(current_node.state)
             if current_node.g_score > g_scores.get(current_state_key, float("inf")):
                 continue
 
-            # Expand the node by trying all applicable actions
             for action in self.actions.get_actions():
                 if not action.is_applicable(current_node.state):
                     continue
 
                 self.stats.nodes_expanded += 1
-
-                # Apply the action to get the new state
-                new_state = action.apply(current_node.state.copy())
+                new_state = action.apply(current_node.state)
                 new_state_key = hash(new_state)
-
-                # Calculate tentative g_score
                 tentative_g_score = current_node.g_score + action.cost
 
-                # Check if we've found a better path to this state
                 if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
                     continue
 
-                # This is the best path to this state so far
-                came_from[new_state_key] = current_node
                 g_scores[new_state_key] = tentative_g_score
-
-                # Create a new node
                 new_node = Node(new_state, current_node, goal, action)
                 new_node.g_score = tentative_g_score
-
-                # Add to frontier
                 heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
-        logger.warning(
-            "No plan found after %d iterations (max: %d)",
-            iteration,
-            self.max_iterations,
-        )
+        return None
+
+    async def _async_find_plan(
+        self, world_state: WorldState, goal: Goal, max_depth: Optional[int]
+    ) -> Optional[Plan]:
+        """Asynchronously find a plan using A* search."""
+        logger.info("Async planning to achieve goal: %s", goal)
+
+        start_node = Node(world_state, None, goal)
+        frontier = []
+        heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
+
+        g_scores: Dict[StateKey, float] = {hash(world_state): 0}
+        iteration = 0
+
+        while frontier and (max_depth is None or iteration < self.max_iterations):
+            iteration += 1
+            self.stats.nodes_visited += 1
+            _, _, current_node = heapq.heappop(frontier)
+
+            if goal.is_satisfied(current_node.state):
+                return self._reconstruct_plan(current_node)
+
+            current_state_key = hash(current_node.state)
+            if current_node.g_score > g_scores.get(current_state_key, float("inf")):
+                continue
+
+            for action in self.actions.get_actions():
+                if not action.is_applicable(current_node.state):
+                    continue
+
+                self.stats.nodes_expanded += 1
+                # Use async_apply here
+                new_state = await action.async_apply(current_node.state)
+                new_state_key = hash(new_state)
+                tentative_g_score = current_node.g_score + action.cost
+
+                if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
+                    continue
+
+                g_scores[new_state_key] = tentative_g_score
+                new_node = Node(new_state, current_node, goal, action)
+                new_node.g_score = tentative_g_score
+                heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
         return None
 
