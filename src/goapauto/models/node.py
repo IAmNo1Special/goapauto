@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
 
-from .actions import Action
-from .goal import Goal
-from .worldstate import WorldState
+from goapauto.models.actions import Action
+from goapauto.models.goal import Goal
+from goapauto.models.worldstate import WorldState
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="Node")

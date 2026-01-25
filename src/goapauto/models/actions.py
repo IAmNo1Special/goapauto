@@ -3,7 +3,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, TypeVar
 
-
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="Action")
 
@@ -53,10 +52,23 @@ class Action:
                 if not hasattr(state, attr):
                     logger.debug("State missing required attribute: %s", attr)
                     return False
-                if getattr(state, attr) != expected_value:
+
+                current_value = getattr(state, attr)
+
+                # Handle callable preconditions (e.g., lambdas)
+                if callable(expected_value):
+                    if not expected_value(current_value):
+                        logger.debug(
+                            "Callable precondition for %s returned False (value: %s)",
+                            attr,
+                            current_value,
+                        )
+                        return False
+                # Handle direct value comparison
+                elif current_value != expected_value:
                     logger.debug(
                         "Precondition not met: %s != %s",
-                        getattr(state, attr),
+                        current_value,
                         expected_value,
                     )
                     return False
@@ -91,7 +103,13 @@ class Action:
 
             # Apply each effect to the new state
             for attr, value in self.effects.items():
-                setattr(new_state, attr, value)
+                if callable(value):
+                    # For callable effects, pass the current state to the function
+                    # Note: We pass the ORIGINAL state, not new_state, to ensure
+                    # atomic updates based on the state before action
+                    setattr(new_state, attr, value(state))
+                else:
+                    setattr(new_state, attr, value)
 
             logger.debug("New state after %s: %s", self.name, new_state)
             return new_state

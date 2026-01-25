@@ -37,19 +37,19 @@ Example usage:
     >>> plan, status = planner.generate_plan(world_state, goal)
 """
 
-from .models.goap_planner import Planner, PlanResult, PlanStats, Plan
-from .models.goal import Goal
-from .models.actions import Action, Actions
-from .models.worldstate import WorldState
+from goapauto.models.actions import Action, Actions
+from goapauto.models.goal import Goal
+from goapauto.models.goap_planner import Plan, Planner, PlanResult, PlanStats
+from goapauto.models.worldstate import WorldState
 
 __version__ = "0.1.1"
 __all__ = [
-    'Planner',
-    'Goal',
-    'Action',
-    'Actions',
-    'WorldState',
-    'PlanResult',
-    'PlanStats',
-    'Plan'
+    "Planner",
+    "Goal",
+    "Action",
+    "Actions",
+    "WorldState",
+    "PlanResult",
+    "PlanStats",
+    "Plan",
 ]

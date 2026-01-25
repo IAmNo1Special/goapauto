@@ -7,10 +7,10 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
 
-from .actions import Actions
-from .goal import Goal
-from .node import Node
-from .worldstate import WorldState
+from goapauto.models.actions import Actions
+from goapauto.models.goal import Goal
+from goapauto.models.node import Node
+from goapauto.models.worldstate import WorldState
 
 # Set up console for Windows to support Unicode
 if os.name == "nt":
