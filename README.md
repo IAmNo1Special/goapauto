@@ -1,49 +1,51 @@
-# GOAP Planner
+# GOAP Planner (`goapauto`)
 
-A flexible Goal-Oriented Action Planning (GOAP) system designed for game AI and general planning problems. This implementation provides a clean, strictly-typed, modular architecture for defining intelligent behaviors.
+> **Goal-Oriented Action Planning for Python** — Build intelligent, autonomous agents with strict typing and comprehensive tooling.
 
-## Features
+![CI](https://github.com/IAmNo1Special/goapauto/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/IAmNo1Special/goapauto)
+![License](https://img.shields.io/github/license/IAmNo1Special/goapauto)
 
-- 🎯 **Goal-Oriented**: customizable actions, preconditions, and goals.
-- 🧠 **A* Search**: finds the optimal plan to satisfy detailed world states.
-- ⚡ **Strict API**: Built on Pydantic for validation and type safety.
-- 📊 **Visual & Observable**: Built-in visualization tools (Mermaid) and event hooks.
-- 🧩 **Modular**: Decoupled Sensors, Goals, and Arbitrators.
+`goapauto` provides a modular framework for AI decision-making using A* search. It separates **Perception** (Sensors), **Thinking** (Arbitration), **Planning** (A*), and **Acting** (Actions), making it ideal for game AI, NPCs, and simulation bots.
 
-## Documentation
+## 🚀 Key Features (v0.2.0)
 
-- **[User Guide](docs/user_guide.md)**: Step-by-step tutorial for building your first agent.
-- **[API Reference](docs/api_reference.md)**: Detailed documentation of classes and methods.
-- **[Architecture](docs/architecture.md)**: High-level system design and data flow.
-- **[Examples](examples/)**: Runnable scripts demonstrating the planner in action.
+- 🎯 **Goal Arbitration**: Dynamically select the best goal based on priority and state.
+- 🧠 **Smart Planning**: A* pathfinding finds the optimal sequence of actions.
+- 🛡️ **Type Safety**: Built on [Pydantic](https://docs.pydantic.dev/) for strict validation and robustness.
+- 👁️ **Visualizer**: Export search trees to [Mermaid](https://mermaid.js.org/) or Graphviz for debugging.
+- 🔌 **Modular Architecture**: Decoupled components for `WorldState`, `Sensors`, and `Goals`.
 
-## Installation
+## 📚 Documentation
 
-### From PyPI
+Detailed documentation is available in the [`docs/`](docs/) directory:
+
+- 🏁 **[Getting Started](docs/user_guide/getting_started.md)**: Build your first agent in minutes.
+- 📖 **[Core Concepts](docs/user_guide/core_concepts.md)**: Understand the Sense-Think-Plan-Act loop.
+- ⚙️ **[API Reference](docs/index.md#api-reference)**: Deep dive into classes (`WorldState`, `Planner`, etc.).
+
+## 📦 Installation
+
 ```bash
 uv add goapauto
+# or
+pip install goapauto
 ```
 
-### From Source
-```bash
-git clone https://github.com/IAmNo1Special/goapauto.git
-cd goapauto
-uv sync
-```
+## ⚡ Quick Start
 
-## Quick Start
-See the [User Guide](docs/user_guide.md) for a complete walkthrough.
+Here's a minimal example of an agent figuring out how to open a door.
 
 ```python
 from goapauto.models.worldstate import WorldState
 from goapauto.models.goal import Goal
-from goapauto.models.actions import Action, Actions
+from goapauto.models.actions import Action
 from goapauto.models.goap_planner import Planner
 
-# 1. Define State
+# 1. The World: Agent has a key, but the door is closed.
 state = WorldState(has_key=True, is_open=False)
 
-# 2. Define Actions
+# 2. The Action: Needs 'has_key' to open the door.
 open_door = Action(
     name="open_door",
     preconditions={"has_key": True, "is_open": False},
@@ -51,19 +53,36 @@ open_door = Action(
     cost=1.0
 )
 
-# 3. Define Goal
+# 3. The Goal: We want the door open.
 goal = Goal(target_state={"is_open": True})
 
-# 4. Plan
+# 4. The Plan: Find the path.
 planner = Planner(actions_list=[open_door])
 result = planner.generate_plan(state, goal)
 
-print(f"Plan: {result.plan}")
-# Output: Plan: ['open_door']
+print(f"Plan to '{goal.name}': {result.plan}")
+# Output: Plan to "{'is_open': True}": ['open_door']
 ```
 
-## Contributing
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+## 🛠️ Advanced Tooling
 
-## License
-MIT
+### Visualization
+Debug your planner's decision-making process by exporting the search tree:
+
+```python
+from goapauto.utils.visualizer import SearchTreeVisualizer
+
+viz = SearchTreeVisualizer()
+planner.register_hook("on_node_expanded", viz.on_node_expanded)
+
+# ... run plan ...
+
+# Save as a Mermaid diagram
+viz.export("planning_tree.mmd")
+```
+
+## 🤝 Contributing
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## 📄 License
+MIT License. See [LICENSE](LICENSE).
