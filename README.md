@@ -29,7 +29,7 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 ```bash
 uv add goapauto
 # or
-pip install goapauto
+uv add goapauto
 ```
 
 ## ⚡ Quick Start
