@@ -30,4 +30,8 @@ selected_goal = arbitrator.select_goal(state)
 
 ### Methods
 - **`add_goal(goal: Goal)`**: Add a goal to manage.
+- **`remove_goal(name: str)`**: Remove a goal by its name.
 - **`select_goal(state: WorldState) -> Optional[Goal]`**: Returns best valid goal.
+
+### Configuration
+The `GoalArbitrator` accepts a custom `GoalSelectionStrategy` in its constructor. The default is `PriorityGoalStrategy` (lowest priority number wins).

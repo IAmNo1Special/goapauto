@@ -11,7 +11,7 @@ action = Action(
     name="chop_wood",
     preconditions={"has_axe": True},
     effects={"wood": Increment(1)},
-    cost=1.0
+    cost=1.0 # int or float (default: 1)
 )
 ```
 
