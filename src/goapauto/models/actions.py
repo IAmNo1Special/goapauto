@@ -350,12 +350,19 @@ class Actions:
 
         for i, action_def in enumerate(action_definitions):
             try:
-                if not isinstance(action_def, (list, tuple)) or len(action_def) != 4:
+                if isinstance(action_def, Action):
+                    if self.get_action(action_def.name) is not None:
+                        raise ValueError(
+                            f"Action with name '{action_def.name}' already exists"
+                        )
+                    self._actions.append(action_def)
+                elif isinstance(action_def, (list, tuple)) and len(action_def) == 4:
+                    self.add_action(*action_def)
+                else:
                     raise ValueError(
-                        f"Action definition at index {i} must be a 4-tuple "
+                        f"Action definition at index {i} must be an Action object or a 4-tuple "
                         "(name, preconditions, effects, cost)"
                     )
-                self.add_action(*action_def)
             except Exception as e:
                 logger.error("Error adding action at index %d: %s", i, str(e))
                 raise
