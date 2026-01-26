@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug to help us improve PymordialBlue
+about: Report a bug to help us improve goapauto
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -22,10 +22,9 @@ A clear description of what you expected to happen.
 What actually happened.
 
 ## Environment
-- **PymordialBlue Version**: (e.g., 0.3.1)
+- **goapauto Version**: (e.g., 0.2.0)
 - **Python Version**: (e.g., 3.13.7)
 - **OS**: (e.g., Windows 11)
-- **BlueStacks Version**: (e.g., 5.x)
 
 ## Logs/Error Output
 ```

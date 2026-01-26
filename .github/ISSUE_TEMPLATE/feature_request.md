@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature for Pymordial
+about: Suggest a new feature for goapauto
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''
