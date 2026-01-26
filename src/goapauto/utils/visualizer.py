@@ -45,9 +45,10 @@ class SearchTreeVisualizer:
 
         # Define nodes with labels
         for node_id, node in self.nodes.items():
-            # Create a label with f-score and maybe some state info
+            # Create a label with action name, f-score, and node ID
+            action_name = node.action.name if node.action else "Root"
             f_score = f"{node.f_score:.1f}"
-            label = f'"{node.action.name if node.action else "Root"}\\nf={f_score}"'
+            label = f'"{action_name}\\nf={f_score}"'
             lines.append(f"    {node_id}({label})")
 
         # Define edges with action names
@@ -79,10 +80,14 @@ class SearchTreeVisualizer:
         """Export the search tree to a file.
 
         Args:
-            filepath: Path to save the file. If extension is .mmd, saves mermaid.
-                      Defaulting to mermaid for now.
+            filepath: Path to save the file. If extension is .md, wraps in mermaid blocks.
+                      Defaulting to mermaid content for other extensions.
         """
         content = self.to_mermaid()
+
+        if filepath.lower().endswith(".md"):
+            content = f"```mermaid\n{content}\n```"
+
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
