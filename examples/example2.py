@@ -8,7 +8,6 @@ for planning an optimal morning routine based on different constraints and goals
 
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -35,7 +34,6 @@ def get_initial_state() -> WorldState:
 
 def get_actions_list() -> List[Tuple[str, Dict[str, Any], Dict[str, Any], float]]:
     """Define the available routine actions."""
-    from goapauto.models.actions import Increment, Set
 
     return [
         ("wake_up", {"awake": False}, {"awake": True}, 1.0),
@@ -78,7 +76,7 @@ def main() -> int:
                 print(f"- {action_name}")
         return 0
 
-    except Exception as e:
+    except Exception:
         logger.exception("Planning failed")
         return 1
 

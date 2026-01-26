@@ -106,3 +106,33 @@ class TestActionsCollection:
 
         assert len(applicable) == 1
         assert applicable[0].name == "valid"
+
+    def test_add_actions_mixed(self):
+        """Test adding multiple actions with mixed formats (tuples and Action objects)."""
+        actions = Actions()
+
+        # 1. Add via tuple
+        # 2. Add via Action object
+        mixed_definitions = [
+            ("tuple_action", {"a": 1}, {"b": 1}, 1.0),
+            Action(
+                name="object_action", preconditions={"c": 1}, effects={"d": 1}, cost=2.0
+            ),
+        ]
+
+        actions.add_actions(mixed_definitions)
+
+        assert "tuple_action" in actions
+        assert "object_action" in actions
+        assert len(actions) == 2
+        assert actions.get_action("object_action").cost == 2.0
+
+        # Test duplicate name error with object
+        with pytest.raises(ValueError, match="already exists"):
+            actions.add_actions(
+                [Action(name="tuple_action", preconditions={}, effects={})]
+            )
+
+        # Test invalid format error
+        with pytest.raises(ValueError, match="must be an Action object or a 4-tuple"):
+            actions.add_actions([{"invalid": "format"}])

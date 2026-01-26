@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Tuple
 # Add the parent directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from goapauto import Goal, Planner, PlanResult, WorldState
+from goapauto import Goal, Planner, WorldState
 
 # Configure logging - only show WARNING and above
 logging.basicConfig(
