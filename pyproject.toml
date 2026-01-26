@@ -1,6 +1,6 @@
 [project]
 name = "goapauto"
-version = "0.2.0"
+version = "0.2.1"
 description = "A flexible Goal-Oriented Action Planning (GOAP) system for game AI and planning problems, featuring A* search, efficient state management, and modular design."
 readme = "README.md"
 authors = [

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-01-25
+
+### Added
+- **Actions API**: `Actions.add_actions` and `Planner` now natively support `Action` objects in addition to 4-tuples.
+- **Tests**: Additional test coverage for mixed-format action collections in `test_actions.py`.
+
+### Changed
+- **Polish**: Removed unused imports and variables in `example1.py` and `example2.py`.
+
+### Fixed
+- **CI/CD**: Resolved documentation deployment failures by adding `mkdocs` and related packages to dev dependencies in `pyproject.toml`.
+
 ## [0.2.0] - 2026-01-25
 
 ### Added

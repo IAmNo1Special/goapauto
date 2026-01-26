@@ -1,3 +1,17 @@
+# Release 0.2.1: The Polish Update
+
+**goapauto 0.2.1** is a patch release focused on stability, API cleanup, and improved developer experience.
+
+## ✨ Improvements
+- **Enhanced `Actions` API**: The `Actions.add_actions` and `Planner` initialization now natively supports `Action` objects alongside the legacy 4-tuple format.
+- **Clean Documentation**: Resolved several linting issues in `example1.py` and `example2.py` (unused imports and variables).
+
+## 🛠️ Internal
+- Added additional test coverage for mixed-format action collections in `test_actions.py`.
+- Finalized CI/CD dependencies for documentation deployment.
+
+---
+
 # Release 0.2.0: The Foundations Update
 
 **goapauto 0.2.0** brings professional-grade tooling and strict architecture to the GOAP planner, establishing a solid foundation for complex AI agents.
