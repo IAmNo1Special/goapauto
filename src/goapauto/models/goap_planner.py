@@ -5,7 +5,17 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from goapauto.models.action_provider import ActionProvider, StaticActionProvider
 from goapauto.models.actions import Action, Actions
@@ -36,7 +46,15 @@ T = TypeVar("T", bound="Planner")
 
 # Type aliases for better readability
 Plan = List[str]
-PlanResult = Tuple[Optional[Plan], str]
+
+
+class PlanResult(NamedTuple):
+    """Result of a planning operation."""
+
+    plan: Optional[Plan]
+    message: str
+
+
 StateKey = int  # Hash of a WorldState
 HeuristicFn = Callable[[WorldState, Union[Goal, Dict[str, Any]]], float]
 
@@ -164,14 +182,14 @@ class Planner:
 
             if goal.is_satisfied(world_state):
                 self.stats.execution_time = time.time() - start_time
-                return [], "✅ Goal is already satisfied!"
+                return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
             plan = self._find_plan(world_state, goal, max_depth, h_fn)
             return self._finalize_plan_generation(plan, start_time)
 
         except Exception as e:
             logger.exception("Error during planning")
-            return None, f"❌ Error during planning: {str(e)}"
+            return PlanResult(plan=None, message=f"❌ Error during planning: {str(e)}")
 
     async def async_generate_plan(
         self,
@@ -193,14 +211,14 @@ class Planner:
 
             if goal.is_satisfied(world_state):
                 self.stats.execution_time = time.time() - start_time
-                return [], "✅ Goal is already satisfied!"
+                return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
             plan = await self._async_find_plan(world_state, goal, max_depth, h_fn)
             return self._finalize_plan_generation(plan, start_time)
 
         except Exception as e:
             logger.exception("Error during async planning")
-            return None, f"❌ Error during planning: {str(e)}"
+            return PlanResult(plan=None, message=f"❌ Error during planning: {str(e)}")
 
     def _print_header(self, goal: Goal) -> None:
         """Print planning header information."""
@@ -226,9 +244,9 @@ class Planner:
             raise ValueError(f"max_depth must be positive, got {max_depth}")
 
         if isinstance(world_state, dict):
-            world_state = WorldState(world_state)
+            world_state = WorldState(**world_state)
         if isinstance(goal, dict):
-            goal = Goal(goal)
+            goal = Goal(target_state=goal)
 
         return world_state, goal
 
@@ -261,13 +279,13 @@ class Planner:
                 safe_print(f"  {i}. {action_name}")
             self._display_statistics()
             self._trigger_hook("on_plan_found", plan=plan, stats=self.stats)
-            return plan, message
+            return PlanResult(plan=plan, message=message)
 
         message = "❌ No valid plan found to achieve the goal."
         print(f"\n{message}")
         self._display_statistics()
         self._trigger_hook("on_search_failed", stats=self.stats)
-        return None, message
+        return PlanResult(plan=None, message=message)
 
     def _get_all_available_actions(self, state: WorldState) -> List[Action]:
         """Query all providers for available actions."""

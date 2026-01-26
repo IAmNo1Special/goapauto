@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterator, Optional, Type, TypeVar, Union
+from typing import Any, Dict, Iterator, Type, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict
 
@@ -22,18 +22,7 @@ class WorldState(BaseModel):
         validate_assignment=True,
     )
 
-    def __init__(
-        self, initial_state: Optional[Dict[str, Any]] = None, **kwargs: Any
-    ) -> None:
-        """Initialize a new WorldState instance.
-
-        Args:
-            initial_state: Optional dictionary of initial state values
-            **kwargs: Additional state values as keyword arguments
-        """
-        data = initial_state.copy() if initial_state else {}
-        data.update(kwargs)
-        super().__init__(**data)
+    # Custom __init__ removed to enforce strict keyword-only Pydantic API.
 
     def __getitem__(self, key: str) -> Any:
         """Get a state value using dictionary access."""

@@ -150,15 +150,17 @@ def main() -> None:
         planner = Planner(actions_list, max_iterations=5000)
 
         # Generate the plan
-        plan_result: PlanResult = planner.generate_plan(initial_state, goal)
+        result = planner.generate_plan(world_state=initial_state, goal=goal)
 
-        if plan_result[1].startswith("[SUCCESS]"):
+        if result.plan:
             logger.info("Plan generated successfully:")
-            for action_name in plan_result[0] or []:
+            for action_name in result.plan:
                 logger.info(f"- {action_name}")
         else:
             logger.warning("Plan generation failed:")
-            logger.warning(f"Status: {plan_result[1]}")
+            logger.warning(f"Status: {result.message}")
+
+        return 0
 
     except Exception as e:
         logger.exception(f"An error occurred during planning: {e}")

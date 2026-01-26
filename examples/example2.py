@@ -8,166 +8,80 @@ for planning an optimal morning routine based on different constraints and goals
 
 import logging
 import sys
-from datetime import datetime, time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 # Add the parent directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from goapauto import Goal, Planner
+from goapauto import Goal, Planner, WorldState
 
-# Configure logging - only show WARNING and above
-logging.basicConfig(
-    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Configure logging
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-def get_initial_state() -> Dict[str, Any]:
+def get_initial_state() -> WorldState:
     """Create and return the initial morning state."""
-    current_time = datetime.now().time()
-    return {
-        "time": current_time,
-        "in_bed": True,
-        "awake": False,
-        "dressed": False,
-        "showered": False,
-        "teeth_brushed": False,
-        "breakfast_eaten": False,
-        "lunch_packed": False,
-        "coffee_made": False,
-        "email_checked": False,
-        "workout_done": False,
-        "lunch_prepared": False,
-        "work_bag_packed": False,
-        "left_house": False,
-        "late_for_work": False,
-        "energy": 50,  # 0-100 scale
-        "stress": 30,  # 0-100 scale
-    }
+    return WorldState(
+        awake=False,
+        showered=False,
+        dressed=False,
+        coffee_made=False,
+        breakfast_eaten=False,
+    )
 
 
 def get_actions_list() -> List[Tuple[str, Dict[str, Any], Dict[str, Any], float]]:
-    """Define the list of available morning routine actions."""
+    """Define the available routine actions."""
+    from goapauto.models.actions import Increment, Set
+
     return [
-        # Basic wake up actions
-        (
-            "wake_up",
-            {"in_bed": True, "awake": False},
-            {"in_bed": False, "awake": True, "energy": -10},
-            1.0,
-        ),
-        # Hygiene actions
-        (
-            "shower",
-            {"awake": True, "showered": False},
-            {"showered": True, "energy": 10, "stress": -15},
-            15.0,  # Takes 15 minutes
-        ),
-        (
-            "brush_teeth",
-            {"awake": True, "teeth_brushed": False},
-            {"teeth_brushed": True},
-            2.0,  # Takes 2 minutes
-        ),
-        # Dressing
-        (
-            "get_dressed",
-            {"awake": True, "dressed": False},
-            {"dressed": True},
-            5.0,  # Takes 5 minutes
-        ),
-        # Food and drink
+        ("wake_up", {"awake": False}, {"awake": True}, 1.0),
+        ("shower", {"awake": True, "showered": False}, {"showered": True}, 10.0),
+        ("get_dressed", {"awake": True, "dressed": False}, {"dressed": True}, 5.0),
         (
             "make_coffee",
             {"awake": True, "coffee_made": False},
-            {"coffee_made": True, "energy": 20},
+            {"coffee_made": True},
             5.0,
         ),
         (
             "eat_breakfast",
             {"awake": True, "breakfast_eaten": False},
-            {"breakfast_eaten": True, "energy": 15, "stress": -10},
-            15.0,
-        ),
-        (
-            "pack_lunch",
-            {"awake": True, "lunch_packed": False},
-            {"lunch_packed": True, "stress": -5},
+            {"breakfast_eaten": True},
             10.0,
-        ),
-        # Work preparation
-        (
-            "check_email",
-            {"awake": True, "email_checked": False},
-            {
-                "email_checked": True,
-                "stress": lambda state: 10 if state["time"] > time(9, 0) else -5,
-            },
-            10.0,
-        ),
-        (
-            "pack_work_bag",
-            {"awake": True, "work_bag_packed": False},
-            {"work_bag_packed": True},
-            5.0,
-        ),
-        # Exercise
-        (
-            "workout",
-            {"awake": True, "workout_done": False, "energy": (lambda x: x > 30)},
-            {"workout_done": True, "energy": -20, "stress": -20},
-            30.0,
-        ),
-        # Final steps
-        (
-            "leave_house",
-            {
-                "dressed": True,
-                "teeth_brushed": True,
-                "work_bag_packed": True,
-                "left_house": False,
-                "time": (lambda t: t < time(8, 30)),  # Must leave before 8:30
-            },
-            {"left_house": True, "stress": -10},
-            2.0,
         ),
     ]
 
 
 def main() -> int:
-    """Main function to demonstrate morning routine planning."""
+    """Main function demonstrating the modernized GOAP system."""
     try:
-        # Initialize state and actions
         initial_state = get_initial_state()
-        actions_list = get_actions_list()
+        actions = get_actions_list()
 
-        # Define the goal - be awake
         goal = Goal(
-            name="Awoke and showered",
+            target_state={"awake": True, "showered": True, "dressed": True},
             priority=1,
-            target_state={
-                "awake": True,
-                "showered": True,
-            },
+            name="Ready for Work",
         )
 
-        # Create and configure the planner
-        planner = Planner(actions_list, max_iterations=1000)
+        planner = Planner(actions_list=actions)
+        plan_result = planner.generate_plan(world_state=initial_state, goal=goal)
 
-        # Generate the plan
-        plan_result = planner.generate_plan(initial_state, goal)
-
-        # Print the plan
-        print("Plan:")
-        for action in plan_result.plan:
-            print(f"- {action.name}")
+        print(f"\nResult: {plan_result.message}")
+        if plan_result.plan:
+            print("Optimal Morning Routine:")
+            for action_name in plan_result.plan:
+                print(f"- {action_name}")
+        return 0
 
     except Exception as e:
-        logger.exception(f"An error occurred during planning {e}")
+        logger.exception("Planning failed")
         return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

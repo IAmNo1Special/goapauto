@@ -18,7 +18,7 @@ Example usage:
     >>> from goapauto import Planner, Goal, WorldState, Actions
     >>>
     >>> # Define initial state
-    >>> world_state = WorldState({'has_key': False, 'door_open': False})
+    >>> world_state = WorldState(has_key=False, door_open=False)
     >>>
     >>> # Create actions
     >>> actions = Actions()
