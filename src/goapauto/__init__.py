@@ -43,7 +43,7 @@ from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 from goapauto.utils.visualizer import SearchTreeVisualizer
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __all__ = [
     "Planner",
     "Goal",
