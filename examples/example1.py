@@ -1,6 +1,6 @@
 """
 This script demonstrates the GOAP (Goal-Oriented Action Planning) system
-for the Revomon game bot. It defines the game state, available actions,
+for the GuwopMon game bot. It defines the game state, available actions,
 and demonstrates how to generate and execute plans to achieve goals.
 """
 
@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Tuple
 # Add the parent directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from goapauto import Goal, Planner, PlanResult
+from goapauto import Goal, Planner, PlanResult, WorldState
 
 # Configure logging - only show WARNING and above
 logging.basicConfig(
@@ -21,28 +21,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_initial_state() -> Dict[str, Any]:
+def get_initial_state() -> WorldState:
     """Create and return the initial game state.
 
     Returns:
         Dictionary representing the initial state of the game.
     """
-    return {
-        "is_open": False,  # Game client window is closed
-        "is_focused": False,  # Game client doesn't have focus
-        "is_loading": False,  # Game is not currently loading
-        "revomon_app_open": False,  # Revomon app is not open
-        "revomon_game_started": False,  # Revomon game is not started
-        "revomon_game_loading": False,  # Revomon game is not loading
-        "logged_in": False,  # User is not logged in
-        "logging_in": False,  # Login process is not in progress
-        "menu_open": False,  # In-game menu is closed
-        "tv_open": False,  # TV interface is closed
-        "mon_selected": False,  # No Revomon is selected
-        "location": "outside",  # Current location in-game
-        "is_grading": False,  # Not currently grading Revomon
-        "mons_graded": False,  # No Revomon has been graded yet
-    }
+    return WorldState(
+        is_open=False,  # Game client window is closed
+        is_focused=False,  # Game client doesn't have focus
+        is_loading=False,  # Game is not currently loading
+        guwopmon_app_open=False,  # GuwopMon app is not open
+        guwopmon_game_started=False,  # GuwopMon game is not started
+        guwopmon_game_loading=False,  # GuwopMon game is not loading
+        logged_in=False,  # User is not logged in
+        logging_in=False,  # Login process is not in progress
+        menu_open=False,  # In-game menu is closed
+        tv_open=False,  # TV interface is closed
+        mon_selected=False,  # No GuwopMon is selected
+        location="outside",  # Current location in-game
+        is_grading=False,  # Not currently grading GuwopMon
+        mons_graded=False,  # No GuwopMon has been graded yet
+    )
 
 
 def get_actions_list() -> List[Tuple[str, Dict[str, Any], Dict[str, Any], float]]:
@@ -67,26 +67,26 @@ def get_actions_list() -> List[Tuple[str, Dict[str, Any], Dict[str, Any], float]
         ),
         # Game launch sequence
         (
-            "open_revomon_app",
-            {"is_open": True, "revomon_app_open": False},
-            {"revomon_app_open": True},
+            "open_guwopmon_app",
+            {"is_open": True, "guwopmon_app_open": False},
+            {"guwopmon_app_open": True},
             1.0,
         ),
         (
             "start_game",
             {
                 "is_open": True,
-                "revomon_app_open": True,
-                "revomon_game_started": False,
-                "revomon_game_loading": False,
+                "guwopmon_app_open": True,
+                "guwopmon_game_started": False,
+                "guwopmon_game_loading": False,
             },
-            {"revomon_game_started": True},
+            {"guwopmon_game_started": True},
             1.0,
         ),
         # Authentication
         (
             "log_in",
-            {"revomon_game_started": True, "logged_in": False, "logging_in": False},
+            {"guwopmon_game_started": True, "logged_in": False, "logging_in": False},
             {"logged_in": True},
             1.0,
         ),
@@ -126,7 +126,7 @@ def get_actions_list() -> List[Tuple[str, Dict[str, Any], Dict[str, Any], float]
         ("close_tv", {"tv_open": True}, {"tv_open": False}, 1.0),
         ("select_mon", {"tv_open": True}, {"mon_selected": True}, 1.0),
         (
-            "grade_revomon",
+            "grade_guwopmon",
             {"tv_open": True, "mon_selected": True, "is_grading": False},
             {"mons_graded": True},
             1.0,
