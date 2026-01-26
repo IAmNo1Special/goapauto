@@ -81,7 +81,29 @@ planner.register_hook("on_node_expanded", viz.on_node_expanded)
 viz.export("planning_tree.mmd")
 ```
 
+## Visualization
+
+GoapAuto includes a built-in search tree visualizer that hooks into the planning process to capture every explored node.
+
+### Capturing the Search Tree
+Register the visualizer hook with the planner before generating a plan:
+
+```python
+from goapauto.utils.visualizer import SearchTreeVisualizer
+
+viz = SearchTreeVisualizer()
+planner.register_hook("on_node_expanded", viz.on_node_expanded)
+planner.generate_plan(initial_state, goal)
+viz.export("search_tree.md")
+```
+
+### Branching and Complexity
+Simple planning problems often result in linear "chains". To see A* explore multiple branches, provide actions with overlapping effects or varying costs.
+
+See [examples/complex_search_demo.py](file:///f:/AI/goapauto/examples/complex_search_demo.py) for a scenario that demonstrates branching search trees.
+
 ## 🤝 Contributing
+
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## 📄 License
