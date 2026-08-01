@@ -232,8 +232,8 @@ class Planner:
             raise TypeError(
                 f"world_state must be a dict or WorldState, got {type(world_state)}"
             )
-        if not isinstance(goal, (dict, Goal)):
-            raise TypeError(f"goal must be a dict or Goal, got {type(goal)}")
+        if not isinstance(goal, (dict, Goal, WorldState)):
+            raise TypeError(f"goal must be a dict, Goal, or WorldState, got {type(goal)}")
         if max_depth is not None and max_depth <= 0:
             raise ValueError(f"max_depth must be positive, got {max_depth}")
 
@@ -241,6 +241,8 @@ class Planner:
             world_state = WorldState(**world_state)
         if isinstance(goal, dict):
             goal = Goal(target_state=goal)
+        elif isinstance(goal, WorldState):
+            goal = Goal(target_state=goal.get_state())
 
         return world_state, goal
 

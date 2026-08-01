@@ -6,6 +6,8 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
+from goapauto.models.actions import Effect, Set, Increment, Decrement
+
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="WorldState")
 
@@ -57,6 +59,24 @@ class WorldState(BaseModel):
         """Get a state value with a default if it doesn't exist."""
         return getattr(self, key, default)
 
+    def _apply_effect(self, attr: str, effect: Any) -> None:
+        """Apply an effect to the state, handling special effect types."""
+        if isinstance(effect, Set):
+            setattr(self, attr, effect.value)
+        elif isinstance(effect, Increment):
+            current = getattr(self, attr, 0)
+            setattr(self, attr, current + effect.amount)
+        elif isinstance(effect, Decrement):
+            current = getattr(self, attr, 0)
+            setattr(self, attr, current - effect.amount)
+        elif isinstance(effect, Effect):
+            # Generic Effect: call it with current value
+            current = getattr(self, attr, 0)
+            setattr(self, attr, effect(current))
+        else:
+            # Plain value
+            setattr(self, attr, effect)
+
     def update(self, other: dict[str, Any] | WorldState, **kwargs: Any) -> None:
         """Update the state with values from a dictionary or another WorldState."""
         if isinstance(other, WorldState):
@@ -65,9 +85,9 @@ class WorldState(BaseModel):
             updates = other
 
         for k, v in updates.items():
-            setattr(self, k, v)
+            self._apply_effect(k, v)
         for k, v in kwargs.items():
-            setattr(self, k, v)
+            self._apply_effect(k, v)
 
     def clear(self) -> None:
         """Clear all state values."""
