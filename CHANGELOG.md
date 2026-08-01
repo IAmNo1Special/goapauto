@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-08-01
+
+### Fixed
+
+- **stop rebinding sys.stdout on import and correct schedule timing**
+
+### Changed
+
+- **format AGENTS.md via mdformat-front-matters plugin**
+- **add .agents protocol AGENTS.md at project root**
+- **expand suite to 100% coverage with unit and integration tests**
+- **enforce 100% coverage with pytest-cov**
+
 ## [0.2.5] - 2026-08-01
 
 ### Fixed
