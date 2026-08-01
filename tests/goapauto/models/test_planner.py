@@ -1,6 +1,6 @@
-
 import pytest
 
+from goapauto.models.actions import Increment
 from goapauto.models.goal import Goal
 from goapauto.models.goap_planner import Planner
 from goapauto.models.worldstate import WorldState
@@ -83,3 +83,53 @@ class TestPlanner:
 
         # Verify hook was called
         assert mock_callback.call_count >= 1
+
+    def test_max_depth_limits_search(self):
+        """Test that max_depth limits the depth of the search."""
+        planner = Planner(
+            actions_list=[("inc", {}, {"val": Increment(amount=1)}, 1.0)],
+            max_iterations=1000,
+        )
+        state = WorldState(val=0)
+        goal = Goal(target_state={"val": 5})
+
+        # Depth 2 is too shallow to reach val=5
+        shallow = planner.generate_plan(state, goal, max_depth=2)
+        assert shallow.plan is None
+
+        # Depth 5 is enough to reach val=5
+        deep = planner.generate_plan(state, goal, max_depth=5)
+        assert deep.plan is not None
+        assert len(deep.plan) == 5
+
+    @pytest.mark.asyncio
+    async def test_async_max_depth_limits_search(self):
+        """Test that max_depth limits depth in async planning."""
+        planner = Planner(
+            actions_list=[("inc", {}, {"val": Increment(amount=1)}, 1.0)],
+            max_iterations=1000,
+        )
+        state = WorldState(val=0)
+        goal = Goal(target_state={"val": 5})
+
+        shallow = await planner.async_generate_plan(state, goal, max_depth=2)
+        assert shallow.plan is None
+
+        deep = await planner.async_generate_plan(state, goal, max_depth=5)
+        assert deep.plan is not None
+        assert len(deep.plan) == 5
+
+    def test_total_cost_calculated(self):
+        """Test that PlanStats.total_cost sums action costs."""
+        planner = Planner(
+            actions_list=[
+                ("step1", {"start": True}, {"mid": True}, 2.0),
+                ("step2", {"mid": True}, {"end": True}, 3.0),
+            ]
+        )
+        state = WorldState(start=True, mid=False, end=False)
+        goal = Goal(target_state={"end": True})
+
+        result = planner.generate_plan(state, goal)
+        assert result.plan == ["step1", "step2"]
+        assert planner.stats.total_cost == 5.0

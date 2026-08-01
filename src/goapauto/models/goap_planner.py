@@ -259,14 +259,6 @@ class Planner:
         self.stats.plan_length = len(plan) if plan else 0
         self.stats.execution_time = time.time() - start_time
 
-        # Note: total_cost calculation needs accurate action lookup
-        # This might be tricky with dynamic providers, but we'll try
-        # The 'total_cost' variable was unused, so it's removed.
-        if plan:
-            # For stats, we'll just sum the costs if available
-            # (Requires actions to be findable by name, which might not always work)
-            pass
-
         safe_print("\n" + "=" * 50)
         safe_print("PLAN GENERATION COMPLETE")
         safe_print("=" * 50)
@@ -314,7 +306,7 @@ class Planner:
         g_scores: Dict[StateKey, float] = {hash(world_state): 0}
         iteration = 0
 
-        while frontier and (max_depth is None or iteration < self.max_iterations):
+        while frontier and iteration < self.max_iterations:
             iteration += 1
             self.stats.nodes_visited += 1
             _, _, current_node = heapq.heappop(frontier)
@@ -340,11 +332,16 @@ class Planner:
                 if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
                     continue
 
-                g_scores[new_state_key] = tentative_g_score
                 new_node = Node(
                     new_state, current_node, goal, action, heuristic_fn=heuristic_fn
                 )
                 new_node.g_score = tentative_g_score
+
+                # Respect the max_depth limit for nodes added to the frontier
+                if max_depth is not None and new_node.depth() > max_depth:
+                    continue
+
+                g_scores[new_state_key] = tentative_g_score
                 heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
         return None
@@ -366,7 +363,7 @@ class Planner:
         g_scores: Dict[StateKey, float] = {hash(world_state): 0}
         iteration = 0
 
-        while frontier and (max_depth is None or iteration < self.max_iterations):
+        while frontier and iteration < self.max_iterations:
             iteration += 1
             self.stats.nodes_visited += 1
             _, _, current_node = heapq.heappop(frontier)
@@ -391,11 +388,16 @@ class Planner:
                 if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
                     continue
 
-                g_scores[new_state_key] = tentative_g_score
                 new_node = Node(
                     new_state, current_node, goal, action, heuristic_fn=heuristic_fn
                 )
                 new_node.g_score = tentative_g_score
+
+                # Respect the max_depth limit for nodes added to the frontier
+                if max_depth is not None and new_node.depth() > max_depth:
+                    continue
+
+                g_scores[new_state_key] = tentative_g_score
                 heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
         return None
@@ -403,10 +405,13 @@ class Planner:
     def _reconstruct_plan(self, node: Node) -> Plan:
         """Reconstruct the plan from the goal node back to the start."""
         plan = []
+        total_cost = 0.0
         current = node
 
         while current.parent is not None and current.action is not None:
             plan.insert(0, current.action.name)
+            total_cost += current.action.cost
             current = current.parent
 
+        self.stats.total_cost = total_cost
         return plan
