@@ -43,11 +43,45 @@ T = TypeVar("T", bound="Planner")
 Plan = list[str]
 
 
+@dataclass
+class ScheduleStep:
+    """A single step in a temporal schedule."""
+
+    action: str
+    start_time: float
+    end_time: float
+    cost: float
+
+
+@dataclass
+class Schedule:
+    """Temporal schedule for a plan with action start/end times."""
+
+    steps: list[ScheduleStep]
+    makespan: float
+    total_cost: float
+
+    def to_list(self) -> list[dict]:
+        """Convert to list of dicts for serialization."""
+        return [
+            {
+                "action": step.action,
+                "start_time": step.start_time,
+                "end_time": step.end_time,
+                "duration": step.end_time - step.start_time,
+                "cost": step.cost,
+            }
+            for step in self.steps
+        ]
+
+
 class PlanResult(NamedTuple):
     """Result of a planning operation."""
 
     plan: Plan | None
     message: str
+    schedule: "Schedule | None" = None
+    makespan: float | None = None
 
 
 StateKey = int  # Hash of a WorldState
@@ -196,8 +230,8 @@ class Planner:
                 self.stats.execution_time = time.time() - start_time
                 return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-            plan = self._find_plan(world_state, goal, max_depth, h_fn)
-            return self._finalize_plan_generation(plan, start_time)
+            plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
+            return self._finalize_plan_generation(plan, schedule, start_time)
 
         except Exception as e:
             logger.exception("Error during planning")
@@ -225,8 +259,10 @@ class Planner:
                 self.stats.execution_time = time.time() - start_time
                 return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-            plan = await self._async_find_plan(world_state, goal, max_depth, h_fn)
-            return self._finalize_plan_generation(plan, start_time)
+            plan, schedule = await self._async_find_plan(
+                world_state, goal, max_depth, h_fn
+            )
+            return self._finalize_plan_generation(plan, schedule, start_time)
 
         except Exception as e:
             logger.exception("Error during async planning")
@@ -267,7 +303,7 @@ class Planner:
         return world_state, goal
 
     def _finalize_plan_generation(
-        self, plan: Plan | None, start_time: float
+        self, plan: Plan | None, schedule: Schedule | None, start_time: float
     ) -> PlanResult:
         """Finalize stats and print result message."""
         import time
@@ -285,9 +321,10 @@ class Planner:
             self._log(logging.INFO, "\nPLAN STEPS:")
             for i, action_name in enumerate(plan, 1):
                 self._log(logging.INFO, f"  {i}. {action_name}")
-            self._display_statistics()
+            if self.verbose:
+                self._display_statistics()
             self._trigger_hook("on_plan_found", plan=plan, stats=self.stats)
-            return PlanResult(plan=plan, message=message)
+            return PlanResult(plan=plan, message=message, schedule=schedule)
 
         message = "❌ No valid plan found to achieve the goal."
         self._log(logging.INFO, f"\n{message}")
@@ -313,7 +350,7 @@ class Planner:
         goal: Goal,
         max_depth: int | None,
         heuristic_fn: HeuristicFn | None,
-    ) -> Plan | None:
+    ) -> tuple[Plan, Schedule | None]:
         """Internal method to find a plan using A* search."""
         logger.info("Planning to achieve goal: %s", goal)
 
@@ -344,7 +381,8 @@ class Planner:
             _, _, current_node = heapq.heappop(frontier)
 
             if goal.is_satisfied(current_node.state):
-                return self._reconstruct_plan(current_node)
+                plan, schedule = self._reconstruct_plan(current_node)
+                return plan, schedule
 
             current_state_key = hash(current_node.state)
             if current_node.g_score > g_scores.get(current_state_key, float("inf")):
@@ -396,7 +434,7 @@ class Planner:
                     }
                 )
 
-        return None
+        return [], None
 
     async def _async_find_plan(
         self,
@@ -404,7 +442,7 @@ class Planner:
         goal: Goal,
         max_depth: int | None,
         heuristic_fn: HeuristicFn | None,
-    ) -> Plan | None:
+    ) -> tuple[Plan, Schedule | None]:
         """Asynchronously find a plan using A* search."""
         logger.info("Async planning to achieve goal: %s", goal)
 
@@ -435,7 +473,8 @@ class Planner:
             _, _, current_node = heapq.heappop(frontier)
 
             if goal.is_satisfied(current_node.state):
-                return self._reconstruct_plan(current_node)
+                plan, schedule = self._reconstruct_plan(current_node)
+                return plan, schedule
 
             current_state_key = hash(current_node.state)
             if current_node.g_score > g_scores.get(current_state_key, float("inf")):
@@ -486,21 +525,45 @@ class Planner:
                     }
                 )
 
-        return None
+        return [], None
 
-    def _reconstruct_plan(self, node: Node) -> Plan:
-        """Reconstruct the plan from the goal node back to the start."""
+    def _reconstruct_plan(self, node: Node) -> tuple[Plan, Schedule | None]:
+        """Reconstruct the plan and schedule from the goal node back to the start."""
         plan: Plan = []
+        schedule_steps: list[ScheduleStep] = []
         total_cost = 0.0
+        current_time = 0.0
         current = node
 
         while current.parent is not None and current.action is not None:
             plan.insert(0, current.action.name)
             total_cost += current.action.cost
+
+            # Build schedule step if action has duration
+            if current.action.duration is not None:
+                duration = current.action.duration
+                step = ScheduleStep(
+                    action=current.action.name,
+                    start_time=current_time,
+                    end_time=current_time + duration,
+                    cost=current.action.cost,
+                )
+                schedule_steps.insert(0, step)
+                current_time += duration
+
             current = current.parent
 
         self.stats.total_cost = total_cost
-        return plan
+
+        # Create schedule if any actions have duration
+        schedule = None
+        if schedule_steps:
+            makespan = max(step.end_time for step in schedule_steps)
+            schedule = Schedule(
+                steps=schedule_steps, makespan=makespan, total_cost=total_cost
+            )
+
+        return plan, schedule
 
     def get_search_graph(self) -> dict[str, Any]:
         """Return the search graph from the last planning operation.
