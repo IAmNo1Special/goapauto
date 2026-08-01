@@ -226,7 +226,7 @@ def build_release_notes(current_tag: str, version: str, commits: list[dict]) -> 
         lines += ["", "## 🔧 Other", ""]
         lines += [f"- {m}" for m in changed]
     lines += ["", "______________________________________________________________________", ""]
-    return "\n".join(lines).rstrip()
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def main() -> int:
