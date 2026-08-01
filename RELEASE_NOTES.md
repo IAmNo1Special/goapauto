@@ -1,13 +1,14 @@
-# Release 0.2.7
+# Release 0.3.0
 
-**goapauto 0.2.7** released on 2026-08-01.
+**goapauto 0.3.0** released on 2026-08-01.
 
-## 🐛 Bug Fixes
+## ✨ Features
 
-- ensure release notes end with trailing newline for mdformat
+- implement action description, plan execution helpers, and operator serialization (#44, #45, #46)
 
 ## 🔧 Other
 
-- clean up lint in release notes generator
+- format documentation with mdformat
+- add mdformat-front-matters and .github/scripts/ to lint scope
 
 ______________________________________________________________________

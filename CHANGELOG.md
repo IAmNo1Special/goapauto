@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-01
+
+### Added
+
+- **implement action description, plan execution helpers, and operator serialization (#44, #45, #46)**
+
+### Changed
+
+- **format documentation with mdformat**
+- **add mdformat-front-matters and .github/scripts/ to lint scope**
+
 ## [0.2.7] - 2026-08-01
 
 ### Fixed
