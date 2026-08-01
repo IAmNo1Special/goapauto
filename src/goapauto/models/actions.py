@@ -152,6 +152,29 @@ class Decrement(Effect):
         return f"-= {self.amount}"
 
 
+class Unset(Effect):
+    """Effect that removes an attribute from the state."""
+
+    def __init__(self) -> None:
+        """Initialize the unset effect."""
+        super().__init__()
+
+    def __call__(self, current_value: Any) -> Any:
+        # Return a sentinel to signal deletion
+        return _UNSET_SENTINEL
+
+    def __str__(self) -> str:
+        return "unset"
+
+
+# Sentinel object to signal attribute removal
+_UNSET_SENTINEL = object()
+
+
+# Public alias for Unset
+Delete = Unset
+
+
 @dataclass
 class Action:
     """Represents an action the agent can take.

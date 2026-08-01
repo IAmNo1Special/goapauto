@@ -35,7 +35,7 @@ Example usage:
     >>> result = planner.generate_plan(state, goal)
 """
 
-from goapauto.models.actions import Action, Actions
+from goapauto.models.actions import Action, Actions, Delete, Unset
 from goapauto.models.goal import Goal
 from goapauto.models.goal_arbitrator import GoalArbitrator
 from goapauto.models.goap_planner import Plan, Planner, PlanResult, PlanStats
@@ -43,7 +43,7 @@ from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 from goapauto.utils.visualizer import SearchTreeVisualizer
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __all__ = [
     "Planner",
     "Goal",
@@ -57,4 +57,6 @@ __all__ = [
     "SensorManager",
     "GoalArbitrator",
     "SearchTreeVisualizer",
+    "Unset",
+    "Delete",
 ]

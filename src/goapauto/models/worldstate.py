@@ -6,7 +6,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-from goapauto.models.actions import Effect, Set, Increment, Decrement
+from goapauto.models.actions import _UNSET_SENTINEL, Decrement, Effect, Increment, Set
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="WorldState")
@@ -72,7 +72,13 @@ class WorldState(BaseModel):
         elif isinstance(effect, Effect):
             # Generic Effect: call it with current value
             current = getattr(self, attr, 0)
-            setattr(self, attr, effect(current))
+            result = effect(current)
+            if result is _UNSET_SENTINEL:
+                # Unset effect - remove the attribute
+                if hasattr(self, attr):
+                    delattr(self, attr)
+            else:
+                setattr(self, attr, result)
         else:
             # Plain value
             setattr(self, attr, effect)
