@@ -38,15 +38,18 @@ Example usage:
 from goapauto.models.actions import (
     Action,
     Actions,
+    Decrement,
     Delete,
     GreaterThan,
+    Increment,
     LessThan,
     Range,
+    Set,
     Unset,
 )
 from goapauto.models.goal import Goal
 from goapauto.models.goal_arbitrator import GoalArbitrator
-from goapauto.models.goap_planner import Plan, Planner, PlanResult, PlanStats
+from goapauto.models.goap_planner import Plan, PlanResult, PlanStats, Planner, Schedule, ScheduleStep
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 from goapauto.utils.visualizer import SearchTreeVisualizer
@@ -61,12 +64,17 @@ __all__ = [
     "PlanResult",
     "PlanStats",
     "Plan",
+    "Schedule",
+    "ScheduleStep",
     "Sensor",
     "SensorManager",
     "GoalArbitrator",
     "SearchTreeVisualizer",
     "Unset",
     "Delete",
+    "Set",
+    "Increment",
+    "Decrement",
     "GreaterThan",
     "LessThan",
     "Range",
