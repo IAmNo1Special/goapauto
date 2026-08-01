@@ -1,8 +1,6 @@
 # Goal API Reference
 
-## `goapauto.models.goal.Goal`
-
-Represents a target state to achieve.
+The `Goal` class represents a target state to achieve.
 
 ```python
 from goapauto.models.goal import Goal
@@ -48,14 +46,9 @@ Use built-in predicates for common numeric constraints:
 {"ammo": Range(10, 100)}
 ```
 
-### Methods
-
-- **`is_satisfied(world_state: Any) -> bool`**
-  Checks if all conditions in `target_state` are met by `world_state`.
-  Evaluates callables by calling them with the current value.
-
-- **`get_unsatisfied_conditions(world_state: Any) -> Dict`**
-  Returns conditions not yet met. For callables, returns the predicate object as desired value.
-
-- **`__hash__()`** / **`__eq__()`**
-  Goals are hashable and comparable based on target_state, priority, and name.
+::: goapauto.models.goal.Goal
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false

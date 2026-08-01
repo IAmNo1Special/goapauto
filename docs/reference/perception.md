@@ -1,41 +1,66 @@
 # Perception & Arbitration API Reference
 
-## `goapauto.models.sensors.SensorManager`
+## Sensors
 
-Orchestrates multiple `Sensor` instances to update `WorldState`.
+`Sensor` and `SensorManager` provide dynamic environment perception and state updates.
 
 ```python
+from goapauto.models.sensors import Sensor, SensorManager
+
+class MySensor(Sensor):
+    def sense(self) -> dict:
+        return {"health": 100}
+
 manager = SensorManager()
 manager.add_sensor(MySensor())
 manager.update_state(state)
 ```
 
-### Methods
+::: goapauto.models.sensors.Sensor
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
 
-- **`add_sensor(sensor: Sensor)`**: Register a sensor.
-- **`update_state(state: WorldState) -> WorldState`**: Runs all sensors and updates the state.
-
-## `goapauto.models.sensors.Sensor` (Abstract)
-
-Base class for sensors. Implement `sense() -> Dict[str, Any]`.
+::: goapauto.models.sensors.SensorManager
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
 
 ______________________________________________________________________
 
-## `goapauto.models.goal_arbitrator.GoalArbitrator`
+## Goal Arbitration
 
-Selects the highest priority satisfiable goal from a list.
+`GoalArbitrator` selects the highest priority satisfiable goal from a list.
 
 ```python
+from goapauto.models.goal_arbitrator import GoalArbitrator
+
 arbitrator = GoalArbitrator(goals=[goal1, goal2])
 selected_goal = arbitrator.select_goal(state)
 ```
 
-### Methods
-
-- **`add_goal(goal: Goal)`**: Add a goal to manage.
-- **`remove_goal(name: str)`**: Remove a goal by its name.
-- **`select_goal(state: WorldState) -> Optional[Goal]`**: Returns best valid goal.
-
-### Configuration
-
 The `GoalArbitrator` accepts a custom `GoalSelectionStrategy` in its constructor. The default is `PriorityGoalStrategy` (lowest priority number wins).
+
+::: goapauto.models.goal_arbitrator.GoalArbitrator
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
+
+::: goapauto.models.goal_arbitrator.GoalSelectionStrategy
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+
+::: goapauto.models.goal_arbitrator.PriorityGoalStrategy
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false

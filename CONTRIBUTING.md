@@ -6,14 +6,14 @@ Thank you for your interest in contributing to goapauto! This document provides 
 
 1. **Fork the repository** on GitHub
 1. **Clone your fork** locally:
-   ```bash
-   git clone https://github.com/IAmNo1Special/goapauto.git
-   cd goapauto
-   ```
+    ```bash
+    git clone https://github.com/IAmNo1Special/goapauto.git
+    cd goapauto
+    ```
 1. **Install dependencies** with `uv`:
-   ```bash
-   uv sync
-   ```
+    ```bash
+    uv sync
+    ```
 
 ## Development Workflow
 
@@ -31,29 +31,29 @@ uv run pytest tests/
 
 1. Create a feature branch:
 
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
 
 1. Make your changes following our style guidelines
 
 1. Run tests and linters:
 
-   ```bash
-   uv run pytest tests/
-   uv run ruff check src/ tests/
-   uv run ruff format src/ tests/
-   uv run mypy src/
-   uv run mdformat docs/ README.md CONTRIBUTING.md CHANGELOG.md RELEASE_NOTES.md
-   ```
+    ```bash
+    uv run pytest tests/
+    uv run ruff check src/ tests/
+    uv run ruff format src/ tests/
+    uv run mypy src/
+    uv run mdformat docs/ README.md CONTRIBUTING.md CHANGELOG.md RELEASE_NOTES.md
+    ```
 
 1. Commit with [conventional commits](https://www.conventionalcommits.org/):
 
-   ```bash
-   git commit -m "feat: add new feature"
-   git commit -m "fix: resolve bug in controller"
-   git commit -m "docs: update README"
-   ```
+    ```bash
+    git commit -m "feat: add new feature"
+    git commit -m "fix: resolve bug in controller"
+    git commit -m "docs: update README"
+    ```
 
 ## Code Style
 

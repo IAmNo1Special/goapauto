@@ -1,8 +1,6 @@
 # Actions API Reference
 
-## `goapauto.models.actions.Action`
-
-Represents an atomic action the agent can take.
+The `Action` class represents an atomic action the agent can take.
 
 ```python
 from goapauto.models.actions import Action, Increment
@@ -52,48 +50,118 @@ action = Action(
 )
 ```
 
-### Methods
+::: goapauto.models.actions.Action
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
 
-- **`is_applicable(state: Any) -> bool`**
-  Returns `True` if the state meets all `preconditions`.
+______________________________________________________________________
 
-- **`apply(state: Any) -> WorldState`**
-  Returns a **new** `WorldState` with `effects` applied (immutable transition).
+## Action Collections
 
-- **`async_apply(state: Any) -> WorldState`**
-  Coroutine version of `apply` for async contexts.
-
-- **`__post_init__()`**
-  Validates cost, duration, and types on initialization.
+::: goapauto.models.actions.Actions
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
 
 ______________________________________________________________________
 
 ## Predicates & Effects
 
-### `goapauto.models.actions.Predicate`
+Predicates are used in preconditions to check state values; effects define how state changes when an action is applied.
 
-Base class for conditions.
+### Predicates
 
-- **`Equal(value)`**: Checks equality.
-- **`GreaterThan(value)`**: Checks `state_val > value`.
-- **`LessThan(value)`**: Checks `state_val < value`.
-- **`Range(min_value, max_value)`**: Checks `min <= state_val <= max` (inclusive).
+All predicates support positional arguments:
 
-### `goapauto.models.actions.Effect`
+```python
+Range(10, 20)           # Range(min=10, max=20)
+GreaterThan(5)
+LessThan(50)
+```
 
-Base class for state mutations.
+::: goapauto.models.actions.Predicate
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
+        members: [__call__]
 
-- **`Set(value)`**: Sets attribute to value.
-- **`Increment(amount=1)`**: Adds amount.
-- **`Decrement(amount=1)`**: Subtracts amount.
-- **`Unset()`** / **`Delete()`**: Removes attribute from state.
+::: goapauto.models.actions.Equal
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
 
-### Positional Arguments
+::: goapauto.models.actions.NotEqual
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
 
-All predicates and effects support positional arguments:
+::: goapauto.models.actions.GreaterThan
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+
+::: goapauto.models.actions.LessThan
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+
+::: goapauto.models.actions.Range
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+
+### Effects
+
+All effects support positional arguments:
 
 ```python
 Set("kitchen")          # instead of Set(value="kitchen")
 Increment(5)            # instead of Increment(amount=5)
-Range(10, 20)           # Range(min=10, max=20)
+Decrement(3)
+Unset()                 # remove attribute
+Delete()                # alias for Unset
 ```
+
+::: goapauto.models.actions.Effect
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
+        members: [__call__]
+
+::: goapauto.models.actions.Set
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+
+::: goapauto.models.actions.Increment
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+
+::: goapauto.models.actions.Decrement
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+
+::: goapauto.models.actions.Unset
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false

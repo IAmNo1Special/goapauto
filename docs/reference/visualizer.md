@@ -1,29 +1,24 @@
 # Visualizer API Reference
 
-## `goapauto.utils.visualizer.SearchTreeVisualizer`
-
-Hooks into the planner to visualize the search tree.
+The `SearchTreeVisualizer` hooks into the planner to visualize the search tree.
 
 ```python
+from goapauto.utils.visualizer import SearchTreeVisualizer
+
 viz = SearchTreeVisualizer()
 planner.register_hook("on_node_expanded", viz.on_node_expanded)
 # ... plan ...
 viz.export("tree.mmd")
 ```
 
-### Methods
+::: goapauto.utils.visualizer.SearchTreeVisualizer
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false
 
-- **`export(filepath: str) -> None`**
-  Saves the tree to a file. Supports `.mmd` (Mermaid).
-
-- **`to_mermaid() -> str`**
-  Returns the raw Mermaid diagram string.
-
-- **`to_graphviz() -> str`**
-  Returns the raw Graphviz DOT string.
-
-- **`clear()`**
-  Resets the captured data.
+______________________________________________________________________
 
 ## Search Graph Export
 

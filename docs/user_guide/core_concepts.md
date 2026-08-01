@@ -14,11 +14,11 @@
 ### 2. Action System
 
 - **Action**: Atomic unit containing:
-  - `preconditions`: Predicates (`Equal`, `GreaterThan`, `LessThan`, `Range`, callables) that must match the world state.
-  - `effects`: Transformations (`Set`, `Increment`, `Decrement`, `Unset`/`Delete`) applied to the state.
-  - `cost`: Scalar float or multi-dimensional dict/list for optimization.
-  - `duration`: Optional float for temporal planning (seconds).
-- **Planner**: Uses A* search to find the lowest-cost sequence of actions connecting `Start State` -> `Goal State`.
+    - `preconditions`: Predicates (`Equal`, `GreaterThan`, `LessThan`, `Range`, callables) that must match the world state.
+    - `effects`: Transformations (`Set`, `Increment`, `Decrement`, `Unset`/`Delete`) applied to the state.
+    - `cost`: Scalar float or multi-dimensional dict/list for optimization.
+    - `duration`: Optional float for temporal planning (seconds).
+- **Planner**: Uses A\* search to find the lowest-cost sequence of actions connecting `Start State` -> `Goal State`.
 - **Cost optimization**: `Planner(cost_weights=...)` supports weighted multi-dimensional costs.
 - **Temporal planning**: Actions with `duration` generate a `Schedule` with start/end times and makespan.
 
@@ -27,9 +27,9 @@
 For continuous agents, the system operates in a loop:
 
 1. **Sense**: `SensorManager` aggregates data from `Sensor`s to update `WorldState`.
-2. **Think (Arbitrate)**: `GoalArbitrator` evaluates all `Goal`s and selects the highest-priority one that is not yet satisfied.
-3. **Plan**: `Planner` generates a specific plan to satisfy the selected `Goal`.
-4. **Act**: The agent executes the plan (actions).
+1. **Think (Arbitrate)**: `GoalArbitrator` evaluates all `Goal`s and selects the highest-priority one that is not yet satisfied.
+1. **Plan**: `Planner` generates a specific plan to satisfy the selected `Goal`.
+1. **Act**: The agent executes the plan (actions).
 
 ### 4. Goal System
 
@@ -40,7 +40,7 @@ For continuous agents, the system operates in a loop:
 
 ### 5. Planning & Search
 
-- **Algorithm**: A* search with configurable heuristic (`Node.heuristic` or `Node.numeric_heuristic`).
+- **Algorithm**: A\* search with configurable heuristic (`Node.heuristic` or `Node.numeric_heuristic`).
 - **Depth limiting**: `max_depth` parameter to limit search depth.
 - **Hooks**: `on_node_expanded`, `on_plan_found`, `on_search_failed` for observability.
 - **Search graph**: `Planner.get_search_graph()` exposes nodes, edges, and metadata for visualization/analysis.

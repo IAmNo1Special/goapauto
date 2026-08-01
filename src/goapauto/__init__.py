@@ -49,7 +49,14 @@ from goapauto.models.actions import (
 )
 from goapauto.models.goal import Goal
 from goapauto.models.goal_arbitrator import GoalArbitrator
-from goapauto.models.goap_planner import Plan, PlanResult, PlanStats, Planner, Schedule, ScheduleStep
+from goapauto.models.goap_planner import (
+    Plan,
+    Planner,
+    PlanResult,
+    PlanStats,
+    Schedule,
+    ScheduleStep,
+)
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 from goapauto.utils.visualizer import SearchTreeVisualizer

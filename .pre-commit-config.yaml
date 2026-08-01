@@ -20,6 +20,7 @@ repos:
       - id: mdformat
         additional_dependencies:
           - mdformat==1.0.0
+          - mdformat-mkdocs
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
