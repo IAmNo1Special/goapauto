@@ -18,10 +18,10 @@ repos:
     rev: 1.0.0
     hooks:
       - id: mdformat
-        exclude: ^AGENTS\.md$
         additional_dependencies:
           - mdformat==1.0.0
           - mdformat-mkdocs
+          - mdformat-front-matters
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
