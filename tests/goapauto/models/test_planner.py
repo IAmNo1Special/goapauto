@@ -133,3 +133,34 @@ class TestPlanner:
         result = planner.generate_plan(state, goal)
         assert result.plan == ["step1", "step2"]
         assert planner.stats.total_cost == 5.0
+
+    def test_search_graph_max_depth_reached(self):
+        """Test that search graph metadata reports the deepest expanded node."""
+        planner = Planner(
+            actions_list=[("inc", {}, {"val": Increment(amount=1)}, 1.0)],
+            max_iterations=1000,
+        )
+        state = WorldState(val=0)
+        goal = Goal(target_state={"val": 3})
+
+        result = planner.generate_plan(state, goal, max_depth=2)
+        assert result.plan is None
+
+        graph = planner.get_search_graph()
+        assert graph["metadata"]["max_depth_reached"] == 2
+
+    @pytest.mark.asyncio
+    async def test_async_search_graph_max_depth_reached(self):
+        """Test that async search graph metadata reports the deepest node."""
+        planner = Planner(
+            actions_list=[("inc", {}, {"val": Increment(amount=1)}, 1.0)],
+            max_iterations=1000,
+        )
+        state = WorldState(val=0)
+        goal = Goal(target_state={"val": 3})
+
+        result = await planner.async_generate_plan(state, goal, max_depth=2)
+        assert result.plan is None
+
+        graph = planner.get_search_graph()
+        assert graph["metadata"]["max_depth_reached"] == 2

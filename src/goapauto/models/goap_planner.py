@@ -161,6 +161,7 @@ class Planner:
         # Search graph tracking (for visualization/debugging)
         self._search_graph_nodes: dict[int, dict[str, Any]] = {}
         self._search_graph_edges: list[dict[str, Any]] = []
+        self._search_graph_max_depth: int = 0
 
     def _get_scalar_cost(self, action: Action) -> float:
         """Compute scalar cost from action's potentially multi-dimensional cost.
@@ -503,6 +504,7 @@ class Planner:
         # Clear previous search graph
         self._search_graph_nodes = {}
         self._search_graph_edges = []
+        self._search_graph_max_depth = 0
 
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
         start_id = id(start_node)
@@ -563,6 +565,9 @@ class Planner:
 
                 # Track in search graph
                 new_id = id(new_node)
+                self._search_graph_max_depth = max(
+                    self._search_graph_max_depth, new_node.depth()
+                )
                 self._search_graph_nodes[new_id] = {
                     "id": new_id,
                     "state": new_node.state.get_state(),
@@ -596,6 +601,7 @@ class Planner:
         # Clear previous search graph
         self._search_graph_nodes = {}
         self._search_graph_edges = []
+        self._search_graph_max_depth = 0
 
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
         start_id = id(start_node)
@@ -655,6 +661,9 @@ class Planner:
 
                 # Track in search graph
                 new_id = id(new_node)
+                self._search_graph_max_depth = max(
+                    self._search_graph_max_depth, new_node.depth()
+                )
                 self._search_graph_nodes[new_id] = {
                     "id": new_id,
                     "state": new_node.state.get_state(),
@@ -731,12 +740,6 @@ class Planner:
             "metadata": {
                 "expanded_count": self.stats.nodes_expanded,
                 "visited_count": self.stats.nodes_visited,
-                "max_depth_reached": max(
-                    (
-                        node.get("depth", 0)
-                        for node in self._search_graph_nodes.values()
-                    ),
-                    default=0,
-                ),
+                "max_depth_reached": self._search_graph_max_depth,
             },
         }
