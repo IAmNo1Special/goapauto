@@ -11,6 +11,9 @@ from goapauto.models.actions import _UNSET_SENTINEL, Decrement, Effect, Incremen
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="WorldState")
 
+# Sentinel for unknown/missing values (distinct from False/None)
+_UNKNOWN = object()
+
 
 class WorldState(BaseModel):
     """A class representing the world state with attribute-style access.
@@ -55,9 +58,22 @@ class WorldState(BaseModel):
         """Return a view of state values."""
         return self.__dict__.values()
 
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get a state value with a default if it doesn't exist."""
+    def get(self, key: str, default: Any = _UNKNOWN) -> Any:
+        """Get a state value with a default if it doesn't exist.
+
+        If default is not provided and key is not set, returns _UNKNOWN sentinel
+        which allows distinguishing between "not set" and "explicitly set to None/False".
+        """
         return getattr(self, key, default)
+
+    def is_known(self, key: str) -> bool:
+        """Check if an attribute has been explicitly set in the state.
+
+        Returns:
+            True if the attribute was explicitly set (even to None/False),
+            False if the attribute was never set.
+        """
+        return key in self.model_fields_set
 
     def _apply_effect(self, attr: str, effect: Any) -> None:
         """Apply an effect to the state, handling special effect types."""
