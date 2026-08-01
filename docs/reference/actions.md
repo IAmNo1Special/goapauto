@@ -10,7 +10,8 @@ action = Action(
     preconditions={"has_axe": True},
     effects={"wood": Increment(1)},
     cost=1.0,           # int or float (default: 1)
-    duration=2.0        # optional duration for temporal planning
+    duration=2.0,       # optional duration for temporal planning
+    description="Chops wood using an available axe" # optional description
 )
 ```
 
@@ -38,7 +39,7 @@ action = Action(
 
 Use with `Planner(cost_weights=...)` to optimize weighted combinations.
 
-### Duration for Temporal Planning
+### Duration & Description
 
 ```python
 action = Action(
@@ -46,7 +47,8 @@ action = Action(
     preconditions={},
     effects={"structure": True},
     cost=10.0,
-    duration=30.0  # seconds
+    duration=30.0,  # seconds
+    description="Constructs a shelter structure"
 )
 ```
 
@@ -76,12 +78,16 @@ Predicates are used in preconditions to check state values; effects define how s
 
 ### Predicates
 
-All predicates support positional arguments:
+All predicates support positional arguments and JSON serialization via `to_dict()` and `from_dict()`:
 
 ```python
 Range(10, 20)           # Range(min=10, max=20)
 GreaterThan(5)
 LessThan(50)
+
+# Serialization / Deserialization
+gt_dict = GreaterThan(5).to_dict()  # {"op": "gt", "value": 5}
+predicate = Predicate.from_dict(gt_dict)
 ```
 
 ::: goapauto.models.actions.Predicate
@@ -90,7 +96,7 @@ LessThan(50)
         show_source: false
         show_bases: false
         inherited_members: false
-        members: [__call__]
+        members: [to_dict, from_dict, __call__]
 
 ::: goapauto.models.actions.Equal
     options:
@@ -124,7 +130,7 @@ LessThan(50)
 
 ### Effects
 
-All effects support positional arguments:
+All effects support positional arguments and JSON serialization via `to_dict()` and `from_dict()`:
 
 ```python
 Set("kitchen")          # instead of Set(value="kitchen")
@@ -132,6 +138,10 @@ Increment(5)            # instead of Increment(amount=5)
 Decrement(3)
 Unset()                 # remove attribute
 Delete()                # alias for Unset
+
+# Serialization / Deserialization
+inc_dict = Increment(5).to_dict()  # {"op": "inc", "amount": 5}
+effect = Effect.from_dict(inc_dict)
 ```
 
 ::: goapauto.models.actions.Effect
@@ -140,7 +150,7 @@ Delete()                # alias for Unset
         show_source: false
         show_bases: false
         inherited_members: false
-        members: [__call__]
+        members: [to_dict, from_dict, __call__]
 
 ::: goapauto.models.actions.Set
     options:

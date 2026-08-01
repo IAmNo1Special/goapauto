@@ -1,6 +1,6 @@
 # Planner API Reference
 
-The `Planner` class is the A\* search engine used to find a plan.
+The `Planner` class is the A\* search engine used to find and execute plans.
 
 ```python
 from goapauto.models.goap_planner import Planner
@@ -19,12 +19,21 @@ planner = Planner(
 result = planner.generate_plan(start_state, goal)
 ```
 
-### Heuristics
+### Plan Execution & Handlers
+
+The planner can execute generated plans step-by-step with custom execution handlers:
 
 ```python
-from goapauto.models.node import Node
+# Register custom execution handler for an action
+def handle_open_door(state, action):
+    state.is_open = True
+    return state
 
-planner = Planner(actions_list=actions, heuristic_fn=Node.numeric_heuristic)
+planner.register_execution_handler("open_door", handle_open_door)
+
+# Execute plan synchronously or asynchronously
+final_state = planner.execute_plan(initial_state, result)
+# or: await planner.async_execute_plan(initial_state, result)
 ```
 
 ::: goapauto.models.goap_planner.Planner
@@ -32,6 +41,18 @@ planner = Planner(actions_list=actions, heuristic_fn=Node.numeric_heuristic)
         show_root_heading: true
         show_source: false
         show_bases: false
+        inherited_members: false
+
+______________________________________________________________________
+
+## PlanExecutionError
+
+Exception raised when plan execution fails (e.g., action precondition not met).
+
+::: goapauto.models.goap_planner.PlanExecutionError
+    options:
+        show_root_heading: true
+        show_source: false
         inherited_members: false
 
 ______________________________________________________________________

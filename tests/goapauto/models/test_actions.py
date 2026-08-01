@@ -5,11 +5,13 @@ from goapauto.models.actions import (
     Actions,
     Decrement,
     Delete,
+    Effect,
     Equal,
     GreaterThan,
     Increment,
     LessThan,
     NotEqual,
+    Predicate,
     Range,
     Set,
     Unset,
@@ -347,8 +349,82 @@ class TestActionsCollection:
             )
 
         # Test invalid format error
-        with pytest.raises(ValueError, match="must be an Action object or a 4-tuple"):
+        with pytest.raises(ValueError, match="must be an Action object or a tuple"):
             actions.add_actions([{"invalid": "format"}])
+
+    def test_add_actions_tuple_lengths(self):
+        """Test adding actions with 4-tuple, 5-tuple (duration/description), and 6-tuple formats."""
+        actions = Actions()
+        actions.add_actions(
+            [
+                ("act4", {}, {}, 1),
+                ("act5_dur", {}, {}, 1, 10.5),
+                ("act5_desc", {}, {}, 1, "description text"),
+                ("act6", {}, {}, 1, 20.0, "full action"),
+            ]
+        )
+
+        assert actions.get_action("act4").cost == 1
+        assert actions.get_action("act5_dur").duration == 10.5
+        assert actions.get_action("act5_desc").description == "description text"
+        assert actions.get_action("act6").duration == 20.0
+        assert actions.get_action("act6").description == "full action"
+
+        with pytest.raises(ValueError, match="must have length 4, 5, or 6"):
+            actions.add_actions([("too_short", {}, {})])
+
+    def test_action_description(self):
+        """Test Action description field validation and string representation."""
+        act = Action("described", {}, {}, description="Detailed explanation")
+        assert act.description == "Detailed explanation"
+        assert "description='Detailed explanation'" in str(act)
+
+        with pytest.raises(TypeError, match="Description must be a string"):
+            Action("bad_desc", {}, {}, description=123)  # type: ignore
+
+    def test_predicate_serialization(self):
+        """Test Predicate to_dict and from_dict serialization."""
+        eq = Equal(5)
+        ne = NotEqual("val")
+        gt = GreaterThan(10)
+        lt = LessThan(20)
+        rng = Range(1, 100)
+
+        assert Predicate.from_dict(eq.to_dict())(5)
+        assert Predicate.from_dict(ne.to_dict())("other")
+        assert Predicate.from_dict(gt.to_dict())(15)
+        assert Predicate.from_dict(lt.to_dict())(5)
+        assert Predicate.from_dict(rng.to_dict())(50)
+
+        with pytest.raises(TypeError, match="must be a dictionary"):
+            Predicate.from_dict("not-a-dict")  # type: ignore
+
+        with pytest.raises(ValueError, match="missing 'op'"):
+            Predicate.from_dict({"value": 5})
+
+        with pytest.raises(ValueError, match="Unknown predicate op"):
+            Predicate.from_dict({"op": "invalid_op", "value": 5})
+
+    def test_effect_serialization(self):
+        """Test Effect to_dict and from_dict serialization."""
+        s = Set(42)
+        inc = Increment(5)
+        dec = Decrement(2)
+        uns = Unset()
+
+        assert Effect.from_dict(s.to_dict())(0) == 42
+        assert Effect.from_dict(inc.to_dict())(10) == 15
+        assert Effect.from_dict(dec.to_dict())(10) == 8
+        assert Effect.from_dict(uns.to_dict())(10) is not None
+
+        with pytest.raises(TypeError, match="must be a dictionary"):
+            Effect.from_dict("not-a-dict")  # type: ignore
+
+        with pytest.raises(ValueError, match="missing 'op'"):
+            Effect.from_dict({"value": 5})
+
+        with pytest.raises(ValueError, match="Unknown effect op"):
+            Effect.from_dict({"op": "invalid_op", "value": 5})
 
     def test_add_actions_type_error(self):
         """Test add_actions rejects non-list/tuple."""

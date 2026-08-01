@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,15 +26,41 @@ class Predicate(BaseModel, ABC):
         """Evaluate the predicate against a value."""
         pass
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert predicate to a serializable dictionary."""
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Predicate:
+        """Create a Predicate subclass instance from a dictionary."""
+        if not isinstance(data, dict):
+            raise TypeError("data must be a dictionary")
+        op = data.get("op")
+        if not op:
+            raise ValueError("Dictionary missing 'op' field")
+        registry: dict[str, type[Predicate]] = {
+            "eq": Equal,
+            "ne": NotEqual,
+            "gt": GreaterThan,
+            "lt": LessThan,
+            "range": Range,
+        }
+        target_cls = registry.get(op)
+        if not target_cls:
+            raise ValueError(f"Unknown predicate op: {op}")
+        kwargs = {k: v for k, v in data.items() if k != "op"}
+        return target_cls(**kwargs)
+
 
 class Equal(Predicate):
     """Predicate that checks if a value is equal to another."""
 
+    op: Literal["eq"] = "eq"
     value: Any
 
     def __init__(self, value: Any) -> None:
         """Initialize the predicate, supporting positional arguments."""
-        super().__init__(value=value)
+        super().__init__(value=value, op="eq")
 
     def __call__(self, other: Any) -> bool:
         return other == self.value
@@ -44,11 +72,12 @@ class Equal(Predicate):
 class NotEqual(Predicate):
     """Predicate that checks if a value is not equal to another."""
 
+    op: Literal["ne"] = "ne"
     value: Any
 
     def __init__(self, value: Any) -> None:
         """Initialize the predicate, supporting positional arguments."""
-        super().__init__(value=value)
+        super().__init__(value=value, op="ne")
 
     def __call__(self, other: Any) -> bool:
         return other != self.value
@@ -60,11 +89,12 @@ class NotEqual(Predicate):
 class GreaterThan(Predicate):
     """Predicate that checks if a value is greater than another."""
 
+    op: Literal["gt"] = "gt"
     value: int | float
 
     def __init__(self, value: int | float) -> None:
         """Initialize the predicate, supporting positional arguments."""
-        super().__init__(value=value)
+        super().__init__(value=value, op="gt")
 
     def __call__(self, other: Any) -> bool:
         return other > self.value
@@ -76,11 +106,12 @@ class GreaterThan(Predicate):
 class LessThan(Predicate):
     """Predicate that checks if a value is less than another."""
 
+    op: Literal["lt"] = "lt"
     value: int | float
 
     def __init__(self, value: int | float) -> None:
         """Initialize the predicate, supporting positional arguments."""
-        super().__init__(value=value)
+        super().__init__(value=value, op="lt")
 
     def __call__(self, other: Any) -> bool:
         return other < self.value
@@ -92,6 +123,7 @@ class LessThan(Predicate):
 class Range(Predicate):
     """Predicate that checks if a value is within a range (inclusive)."""
 
+    op: Literal["range"] = "range"
     min_value: int | float
     max_value: int | float
 
@@ -99,7 +131,7 @@ class Range(Predicate):
         """Initialize the range predicate with inclusive bounds."""
         if min_value > max_value:
             raise ValueError("min_value must be <= max_value")
-        super().__init__(min_value=min_value, max_value=max_value)
+        super().__init__(min_value=min_value, max_value=max_value, op="range")
 
     def __call__(self, other: Any) -> bool:
         return self.min_value <= other <= self.max_value
@@ -122,15 +154,40 @@ class Effect(BaseModel, ABC):
         """Compute the new value based on the current value."""
         pass
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert effect to a serializable dictionary."""
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Effect:
+        """Create an Effect subclass instance from a dictionary."""
+        if not isinstance(data, dict):
+            raise TypeError("data must be a dictionary")
+        op = data.get("op")
+        if not op:
+            raise ValueError("Dictionary missing 'op' field")
+        registry: dict[str, type[Effect]] = {
+            "set": Set,
+            "inc": Increment,
+            "dec": Decrement,
+            "unset": Unset,
+        }
+        target_cls = registry.get(op)
+        if not target_cls:
+            raise ValueError(f"Unknown effect op: {op}")
+        kwargs = {k: v for k, v in data.items() if k != "op"}
+        return target_cls(**kwargs)
+
 
 class Set(Effect):
     """Effect that sets an attribute to a specific value."""
 
+    op: Literal["set"] = "set"
     value: Any
 
     def __init__(self, value: Any) -> None:
         """Initialize the effect, supporting positional arguments."""
-        super().__init__(value=value)
+        super().__init__(value=value, op="set")
 
     def __call__(self, current_value: Any) -> Any:
         return self.value
@@ -142,11 +199,12 @@ class Set(Effect):
 class Increment(Effect):
     """Effect that increments a numeric attribute."""
 
+    op: Literal["inc"] = "inc"
     amount: int | float = 1
 
     def __init__(self, amount: int | float = 1) -> None:
         """Initialize the effect, supporting positional arguments."""
-        super().__init__(amount=amount)
+        super().__init__(amount=amount, op="inc")
 
     def __call__(self, current_value: Any) -> Any:
         return current_value + self.amount
@@ -158,11 +216,12 @@ class Increment(Effect):
 class Decrement(Effect):
     """Effect that decrements a numeric attribute."""
 
+    op: Literal["dec"] = "dec"
     amount: int | float = 1
 
     def __init__(self, amount: int | float = 1) -> None:
         """Initialize the effect, supporting positional arguments."""
-        super().__init__(amount=amount)
+        super().__init__(amount=amount, op="dec")
 
     def __call__(self, current_value: Any) -> Any:
         return current_value - self.amount
@@ -174,9 +233,11 @@ class Decrement(Effect):
 class Unset(Effect):
     """Effect that removes an attribute from the state."""
 
+    op: Literal["unset"] = "unset"
+
     def __init__(self) -> None:
         """Initialize the unset effect."""
-        super().__init__()
+        super().__init__(op="unset")
 
     def __call__(self, current_value: Any) -> Any:
         # Return a sentinel to signal deletion
@@ -205,6 +266,7 @@ class Action:
         cost: The cost of executing this action (used for pathfinding). Can be a single float
               or a dict/list for multi-dimensional costs (e.g., {"time": 30.0, "energy": 5.0}).
         duration: Optional duration in seconds (for temporal planning)
+        description: Optional human-readable description of what the action does
     """
 
     name: str
@@ -212,6 +274,7 @@ class Action:
     effects: dict[str, Any | Effect | Callable[[Any], Any]]
     cost: int | float | dict[str, float] | list[float] = 1
     duration: float | None = None
+    description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the action after initialization."""
@@ -237,6 +300,8 @@ class Action:
             raise TypeError("Duration must be a number")
         if self.duration is not None and self.duration < 0:
             raise ValueError("Duration must be non-negative")
+        if self.description is not None and not isinstance(self.description, str):
+            raise TypeError("Description must be a string")
 
     def is_applicable(self, state: Any) -> bool:
         """Check if this action can be applied to the given state.
@@ -365,10 +430,11 @@ class Action:
 
     def __str__(self) -> str:
         """Return a string representation of the action."""
+        desc = f", description='{self.description}'" if self.description else ""
         return (
             f"{self.__class__.__name__}('{self.name}', "
             f"preconditions={self.preconditions}, "
-            f"effects={self.effects}, cost={self.cost})"
+            f"effects={self.effects}, cost={self.cost}{desc})"
         )
 
     def __repr__(self) -> str:
@@ -393,7 +459,9 @@ class Actions:
         name: str,
         preconditions: dict[str, Any],
         effects: dict[str, Any],
-        cost: int = 1,
+        cost: int | float | dict[str, float] | list[float] = 1,
+        duration: float | None = None,
+        description: str | None = None,
     ) -> None:
         """Add a single action to the collection.
 
@@ -402,6 +470,8 @@ class Actions:
             preconditions: Dictionary of state requirements for the action
             effects: Dictionary of state changes caused by the action
             cost: The cost of executing this action (default: 1)
+            duration: Optional duration in seconds
+            description: Optional human-readable description
 
         Raises:
             ValueError: If an action with the same name already exists
@@ -414,25 +484,39 @@ class Actions:
             raise ValueError(f"Action with name '{name}' already exists")
 
         try:
-            action = Action(name, preconditions, effects, cost)
+            action = Action(
+                name,
+                preconditions,
+                effects,
+                cost,
+                duration=duration,
+                description=description,
+            )
             self._actions.append(action)
             logger.debug("Added action: %s", name)
         except Exception as e:
             logger.error("Failed to add action %s: %s", name, str(e))
             raise
 
-    def add_actions(self, action_definitions: list[tuple]) -> None:
+    def add_actions(
+        self, action_definitions: Sequence[tuple[Any, ...] | Action]
+    ) -> None:
         """Add multiple actions to the collection.
 
+
         Args:
-            action_definitions: List of action definitions where each definition is a tuple
-                in the format (name: str, preconditions: dict, effects: dict, cost: int)
+            action_definitions: List of action definitions where each definition is an
+                Action object or a tuple in format:
+                - (name, preconditions, effects, cost)
+                - (name, preconditions, effects, cost, duration)
+                - (name, preconditions, effects, cost, description)
+                - (name, preconditions, effects, cost, duration, description)
 
         Example:
             actions = Actions()
             actions.add_actions([
                 ("open_door", {"door_locked": False}, {"door_open": True}, 1),
-                ("unlock_door", {"has_key": True}, {"door_locked": False}, 2)
+                ("unlock_door", {"has_key": True}, {"door_locked": False}, 2, "Unlocks door")
             ])
         """
         if not isinstance(action_definitions, (list, tuple)):
@@ -446,12 +530,44 @@ class Actions:
                             f"Action with name '{action_def.name}' already exists"
                         )
                     self._actions.append(action_def)
-                elif isinstance(action_def, (list, tuple)) and len(action_def) == 4:
-                    self.add_action(*action_def)
+                elif isinstance(action_def, (list, tuple)):
+                    n = len(action_def)
+                    if n == 4:
+                        self.add_action(*action_def)
+                    elif n == 5:
+                        fifth = action_def[4]
+                        if isinstance(fifth, str):
+                            self.add_action(
+                                action_def[0],
+                                action_def[1],
+                                action_def[2],
+                                action_def[3],
+                                description=fifth,
+                            )
+                        else:
+                            self.add_action(
+                                action_def[0],
+                                action_def[1],
+                                action_def[2],
+                                action_def[3],
+                                duration=fifth,
+                            )
+                    elif n == 6:
+                        self.add_action(
+                            action_def[0],
+                            action_def[1],
+                            action_def[2],
+                            action_def[3],
+                            duration=action_def[4],
+                            description=action_def[5],
+                        )
+                    else:
+                        raise ValueError(
+                            f"Action definition tuple at index {i} must have length 4, 5, or 6"
+                        )
                 else:
                     raise ValueError(
-                        f"Action definition at index {i} must be an Action object or a 4-tuple "
-                        "(name, preconditions, effects, cost)"
+                        f"Action definition at index {i} must be an Action object or a tuple"
                     )
             except Exception as e:
                 logger.error("Error adding action at index %d: %s", i, str(e))

@@ -534,3 +534,214 @@ class TestPlanner:
         )
         assert scheduled.makespan == 1.0
         assert scheduled.total_cost == 2.0
+
+
+class TestPlanExecution:
+    def test_register_execution_handler_validation(self):
+        """Test execution handler registration validation."""
+        planner = Planner(actions_list=[])
+
+        with pytest.raises(ValueError, match="non-empty string"):
+            planner.register_execution_handler("", lambda s, a: s)
+
+        with pytest.raises(TypeError, match="must be callable"):
+            planner.register_execution_handler("act", "not-callable")  # type: ignore
+
+    def test_execute_plan_sync_and_custom_handler(self, mocker):
+        """Test synchronous plan execution with default effects and custom handler."""
+        planner = Planner(
+            actions_list=[
+                ("step1", {"start": True}, {"mid": True}, 1.0),
+                ("step2", {"mid": True}, {"done": True}, 1.0),
+            ]
+        )
+
+        handler_mock = mocker.Mock(
+            side_effect=lambda state, action: state.copy(deep=True)
+        )
+        planner.register_execution_handler("step2", handler_mock)
+
+        hook_start = mocker.Mock()
+        hook_complete = mocker.Mock()
+        planner.register_hook("on_action_start", hook_start)
+        planner.register_hook("on_action_complete", hook_complete)
+
+        start_state = WorldState(start=True, mid=False, done=False)
+        result = planner.generate_plan(start_state, Goal(target_state={"done": True}))
+
+        final_state = planner.execute_plan(start_state, result)
+
+        assert final_state.mid is True
+        assert handler_mock.call_count == 1
+        assert hook_start.call_count == 2
+        assert hook_complete.call_count == 2
+
+    def test_execute_plan_with_action_objects(self):
+        """Test execute_plan accepting a list or tuple of Action objects directly."""
+        act1 = Action("a1", {"x": 1}, {"x": 2})
+        act2 = Action("a2", {"x": 2}, {"x": 3})
+        planner = Planner()
+
+        final_state = planner.execute_plan(WorldState(x=1), [act1, act2])
+        assert final_state.x == 3
+
+        # Test passing plain tuple
+        final_state_tuple = planner.execute_plan(WorldState(x=1), (act1, act2))
+        assert final_state_tuple.x == 3
+
+    def test_execute_plan_none_plan_result_error(self):
+        """Test execute_plan raises ValueError when passed PlanResult with plan=None."""
+        planner = Planner()
+        res = PlanResult(plan=None, message="No plan")
+
+        with pytest.raises(ValueError, match="contains no valid plan"):
+            planner.execute_plan(WorldState(), res)
+
+    def test_execute_plan_precondition_failure(self, mocker):
+        """Test execute_plan raises PlanExecutionError when preconditions are unmet."""
+        from goapauto.models.goap_planner import PlanExecutionError
+
+        planner = Planner(actions_list=[("step", {"req": True}, {"out": True}, 1.0)])
+        hook_failed = mocker.Mock()
+        planner.register_hook("on_action_failed", hook_failed)
+
+        with pytest.raises(PlanExecutionError, match="not applicable"):
+            planner.execute_plan(WorldState(req=False), ["step"])
+
+        assert hook_failed.call_count == 1
+
+    def test_execute_plan_async_handler_in_sync_mode_error(self):
+        """Test execute_plan raises TypeError when an async handler is provided."""
+        planner = Planner(actions_list=[("step", {}, {}, 1.0)])
+
+        async def async_handler(state, action):
+            return state
+
+        planner.register_execution_handler("step", async_handler)
+
+        with pytest.raises(TypeError, match="Async execution handler"):
+            planner.execute_plan(WorldState(), ["step"])
+
+    def test_execute_plan_type_errors(self):
+        """Test type validation for initial_state and plan."""
+        planner = Planner()
+        with pytest.raises(TypeError, match="must be a WorldState"):
+            planner.execute_plan("not-a-state", [])  # type: ignore
+
+        with pytest.raises(TypeError, match="must be a list"):
+            planner.execute_plan(WorldState(), "not-a-plan")  # type: ignore
+
+        with pytest.raises(TypeError, match="must be an Action or action name"):
+            planner.execute_plan(WorldState(), [123])  # type: ignore
+
+        with pytest.raises(KeyError, match="not found"):
+            planner.execute_plan(WorldState(), ["missing_action"])
+
+    @pytest.mark.asyncio
+    async def test_async_execute_plan_success_and_failure(self):
+        """Test async_execute_plan with async custom handlers and failure paths."""
+        from goapauto.models.goap_planner import PlanExecutionError
+
+        planner = Planner(actions_list=[("step", {"start": True}, {"end": True}, 1.0)])
+
+        async def async_handler(state, action):
+            new_s = state.copy(deep=True)
+            new_s.end = True
+            return new_s
+
+        planner.register_execution_handler("step", async_handler)
+
+        initial = WorldState(start=True, end=False)
+        final_state = await planner.async_execute_plan(initial, ["step"])
+        assert final_state.end is True
+
+        # Test failure in async mode
+        with pytest.raises(PlanExecutionError):
+            await planner.async_execute_plan(WorldState(start=False), ["step"])
+
+    def test_execute_plan_handler_raises_exception_triggers_hooks(self, mocker):
+        """Test execute_plan triggers failure hooks when handler raises unexpected exception."""
+        planner = Planner(actions_list=[("step", {}, {}, 1.0)])
+
+        def bad_handler(state, action):
+            raise RuntimeError("Custom failure")
+
+        planner.register_execution_handler("step", bad_handler)
+
+        hook_failed = mocker.Mock()
+        planner.register_hook("on_action_failed", hook_failed)
+
+        with pytest.raises(RuntimeError, match="Custom failure"):
+            planner.execute_plan(WorldState(), ["step"])
+
+        assert hook_failed.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_async_execute_plan_error_coverage(self, mocker):
+        """Test async_execute_plan error paths for complete test coverage."""
+
+        planner = Planner(actions_list=[("step1", {}, {}, 1.0)])
+
+        # 1. Non-WorldState initial_state
+        with pytest.raises(TypeError, match="must be a WorldState"):
+            await planner.async_execute_plan("not-a-state", ["step1"])  # type: ignore
+
+        # 2. PlanResult with plan=None
+        res_none = PlanResult(plan=None, message="None plan")
+        with pytest.raises(ValueError, match="contains no valid plan"):
+            await planner.async_execute_plan(WorldState(), res_none)
+
+        # 3. Invalid plan type
+        with pytest.raises(TypeError, match="must be a list"):
+            await planner.async_execute_plan(WorldState(), "invalid-type")  # type: ignore
+
+        # 4. Invalid step item type
+        with pytest.raises(TypeError, match="must be an Action or action name"):
+            await planner.async_execute_plan(WorldState(), [999])  # type: ignore
+
+        # 5. Missing action key
+        with pytest.raises(KeyError, match="not found"):
+            await planner.async_execute_plan(WorldState(), ["unknown_step"])
+
+        # 6. Action object step & sync handler in async mode
+        def sync_handler(state, action):
+            new_s = state.copy(deep=True)
+            new_s.handled = True
+            return new_s
+
+        planner.register_execution_handler("act_obj", sync_handler)
+        act = Action("act_obj", {}, {})
+        result_state = await planner.async_execute_plan(WorldState(), [act])
+        assert result_state.handled is True
+
+        # 7. Handler raising non-PlanExecutionError exception in async mode
+        def failing_handler(state, action):
+            raise RuntimeError("Async handler exception")
+
+        planner.register_execution_handler("fail_act", failing_handler)
+        hook_failed = mocker.Mock()
+        planner.register_hook("on_action_failed", hook_failed)
+
+        with pytest.raises(RuntimeError, match="Async handler exception"):
+            await planner.async_execute_plan(WorldState(), [Action("fail_act", {}, {})])
+
+        assert hook_failed.call_count == 1
+
+        # 8. Valid PlanResult in async_execute_plan
+        res_valid = PlanResult(plan=["step1"], message="Valid")
+        valid_state = await planner.async_execute_plan(WorldState(), res_valid)
+        assert valid_state is not None
+
+        # 9. Default async_apply without registered handler
+        unhandled_act = Action("unhandled", {}, {"done": True})
+        unhandled_planner = Planner()
+        final_unhandled = await unhandled_planner.async_execute_plan(
+            WorldState(), [unhandled_act]
+        )
+        assert final_unhandled.done is True
+
+        # 10. Plain tuple step in async_execute_plan
+        tuple_state = await unhandled_planner.async_execute_plan(
+            WorldState(), (unhandled_act,)
+        )
+        assert tuple_state.done is True

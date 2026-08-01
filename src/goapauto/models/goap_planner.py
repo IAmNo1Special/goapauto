@@ -79,6 +79,12 @@ class Schedule:
         ]
 
 
+class PlanExecutionError(ValueError):
+    """Exception raised when plan execution fails (e.g. precondition not met)."""
+
+    pass
+
+
 class PlanResult(NamedTuple):
     """Result of a planning operation."""
 
@@ -160,7 +166,14 @@ class Planner:
             "on_node_expanded": [],
             "on_plan_found": [],
             "on_search_failed": [],
+            "on_action_start": [],
+            "on_action_complete": [],
+            "on_action_failed": [],
+            "on_execution_complete": [],
+            "on_execution_failed": [],
         }
+
+        self.execution_handlers: dict[str, Callable[..., Any]] = {}
 
         # Search graph tracking (for visualization/debugging)
         self._search_graph_nodes: dict[int, dict[str, Any]] = {}
@@ -216,13 +229,235 @@ class Planner:
         """Register a callback for a specific planner event.
 
         Args:
-            event: One of 'on_node_expanded', 'on_plan_found', 'on_search_failed'
+            event: One of 'on_node_expanded', 'on_plan_found', 'on_search_failed',
+                'on_action_start', 'on_action_complete', 'on_action_failed',
+                'on_execution_complete', 'on_execution_failed'
             callback: The function to call when the event occurs
         """
         if event in self.hooks:
             self.hooks[event].append(callback)
         else:
             raise ValueError(f"Unknown event hook: {event}")
+
+    def register_execution_handler(
+        self, action_name: str, handler: Callable[..., Any]
+    ) -> None:
+        """Register a custom execution handler for an action.
+
+        Args:
+            action_name: The name of the action to handle
+            handler: Callable that takes (current_state, action) and returns updated WorldState
+        """
+        if not isinstance(action_name, str) or not action_name.strip():
+            raise ValueError("Action name must be a non-empty string")
+        if not callable(handler):
+            raise TypeError("Handler must be callable")
+        self.execution_handlers[action_name] = handler
+
+    def _get_action_by_name(
+        self, action_name: str, state: WorldState, goal: Goal | None = None
+    ) -> Action | None:
+        """Look up an action by name across all registered ActionProviders for a given state."""
+        for provider in self.providers:
+            actions = provider.provide_actions(state, goal)
+            for action in actions:
+                if action.name == action_name:
+                    return action
+        return None
+
+    def execute_plan(
+        self,
+        initial_state: WorldState,
+        plan: Plan | list[Action] | PlanResult,
+        goal: Goal | None = None,
+    ) -> WorldState:
+        """Execute a sequence of actions on the initial state and return the final state.
+
+        Args:
+            initial_state: Starting WorldState
+            plan: Sequence of action names, Action objects, or a PlanResult
+            goal: Optional Goal context for dynamic action providers
+
+        Returns:
+            WorldState after executing all plan steps
+
+        Raises:
+            TypeError: If initial_state/plan has an invalid type or an async handler is used
+            ValueError: If PlanResult.plan is None
+            KeyError: If an action name is not found in registered providers
+            PlanExecutionError: If an action's preconditions are not met
+        """
+        if not isinstance(initial_state, WorldState):
+            raise TypeError("initial_state must be a WorldState instance")
+
+        steps: list[str | Action] = []
+        if hasattr(plan, "plan") and hasattr(plan, "message"):
+            p_plan = plan.plan
+            if p_plan is None:
+                raise ValueError("PlanResult contains no valid plan to execute.")
+            steps = list(p_plan)
+        elif isinstance(plan, list):
+            steps = list(plan)
+        elif isinstance(plan, tuple):
+            steps = list(plan)
+        else:
+            raise TypeError(
+                "plan must be a list of action names/Action objects or a PlanResult"
+            )
+
+        current_state = initial_state.copy(deep=True)
+
+        for step in steps:
+            action: Action | None = None
+            if isinstance(step, Action):
+                action = step
+            elif isinstance(step, str):
+                action = self._get_action_by_name(step, current_state, goal)
+                if action is None:
+                    raise KeyError(
+                        f"Action '{step}' not found in registered providers."
+                    )
+            else:
+                raise TypeError(
+                    f"Plan step must be an Action or action name string, got {type(step)}"
+                )
+
+            if not action.is_applicable(current_state):
+                self._trigger_hook(
+                    "on_action_failed", action=action, state=current_state
+                )
+                self._trigger_hook(
+                    "on_execution_failed", action=action, state=current_state
+                )
+                raise PlanExecutionError(
+                    f"Action '{action.name}' is not applicable to current state."
+                )
+
+            self._trigger_hook("on_action_start", action=action, state=current_state)
+
+            try:
+                if action.name in self.execution_handlers:
+                    handler = self.execution_handlers[action.name]
+                    import inspect
+
+                    if inspect.iscoroutinefunction(handler):
+                        raise TypeError(
+                            f"Async execution handler for action '{action.name}' cannot be used in "
+                            "synchronous execute_plan. Use async_execute_plan instead."
+                        )
+                    current_state = handler(current_state, action)
+                else:
+                    current_state = action.apply(current_state)
+            except Exception as e:
+                if not isinstance(e, (TypeError, PlanExecutionError)):
+                    self._trigger_hook(
+                        "on_action_failed", action=action, state=current_state
+                    )
+                    self._trigger_hook(
+                        "on_execution_failed", action=action, state=current_state
+                    )
+                raise
+
+            self._trigger_hook("on_action_complete", action=action, state=current_state)
+
+        self._trigger_hook("on_execution_complete", state=current_state)
+        return current_state
+
+    async def async_execute_plan(
+        self,
+        initial_state: WorldState,
+        plan: Plan | list[Action] | PlanResult,
+        goal: Goal | None = None,
+    ) -> WorldState:
+        """Asynchronously execute a sequence of actions on the initial state.
+
+        Args:
+            initial_state: Starting WorldState
+            plan: Sequence of action names, Action objects, or a PlanResult
+            goal: Optional Goal context for dynamic action providers
+
+        Returns:
+            WorldState after executing all plan steps
+
+        Raises:
+            TypeError: If initial_state/plan has an invalid type
+            ValueError: If PlanResult.plan is None
+            KeyError: If an action name is not found in registered providers
+            PlanExecutionError: If an action's preconditions are not met
+        """
+        if not isinstance(initial_state, WorldState):
+            raise TypeError("initial_state must be a WorldState instance")
+
+        steps: list[str | Action] = []
+        if hasattr(plan, "plan") and hasattr(plan, "message"):
+            p_plan = plan.plan
+            if p_plan is None:
+                raise ValueError("PlanResult contains no valid plan to execute.")
+            steps = list(p_plan)
+        elif isinstance(plan, list):
+            steps = list(plan)
+        elif isinstance(plan, tuple):
+            steps = list(plan)
+        else:
+            raise TypeError(
+                "plan must be a list of action names/Action objects or a PlanResult"
+            )
+
+        current_state = initial_state.copy(deep=True)
+
+        for step in steps:
+            action: Action | None = None
+            if isinstance(step, Action):
+                action = step
+            elif isinstance(step, str):
+                action = self._get_action_by_name(step, current_state, goal)
+                if action is None:
+                    raise KeyError(
+                        f"Action '{step}' not found in registered providers."
+                    )
+            else:
+                raise TypeError(
+                    f"Plan step must be an Action or action name string, got {type(step)}"
+                )
+
+            if not action.is_applicable(current_state):
+                self._trigger_hook(
+                    "on_action_failed", action=action, state=current_state
+                )
+                self._trigger_hook(
+                    "on_execution_failed", action=action, state=current_state
+                )
+                raise PlanExecutionError(
+                    f"Action '{action.name}' is not applicable to current state."
+                )
+
+            self._trigger_hook("on_action_start", action=action, state=current_state)
+
+            try:
+                if action.name in self.execution_handlers:
+                    handler = self.execution_handlers[action.name]
+                    import inspect
+
+                    if inspect.iscoroutinefunction(handler):
+                        current_state = await handler(current_state, action)
+                    else:
+                        current_state = handler(current_state, action)
+                else:
+                    current_state = await action.async_apply(current_state)
+            except Exception as e:
+                if not isinstance(e, PlanExecutionError):
+                    self._trigger_hook(
+                        "on_action_failed", action=action, state=current_state
+                    )
+                    self._trigger_hook(
+                        "on_execution_failed", action=action, state=current_state
+                    )
+                raise
+
+            self._trigger_hook("on_action_complete", action=action, state=current_state)
+
+        self._trigger_hook("on_execution_complete", state=current_state)
+        return current_state
 
     def _trigger_hook(self, event: str, *args, **kwargs) -> None:
         """Trigger all registered callbacks for an event."""
