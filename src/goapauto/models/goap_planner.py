@@ -294,12 +294,14 @@ class Planner:
         self._trigger_hook("on_search_failed", stats=self.stats)
         return PlanResult(plan=None, message=message)
 
-    def _get_all_available_actions(self, state: WorldState) -> list[Action]:
+    def _get_all_available_actions(
+        self, state: WorldState, goal: Goal | None = None
+    ) -> list[Action]:
         """Query all providers for available actions."""
         all_actions = []
         for provider in self.providers:
             try:
-                all_actions.extend(provider.provide_actions(state))
+                all_actions.extend(provider.provide_actions(state, goal))
             except Exception as e:
                 logger.error("Error providing actions from %s: %s", provider, e)
         return all_actions
@@ -335,7 +337,7 @@ class Planner:
 
             # Phase 2: Use ActionProviders
             self._trigger_hook("on_node_expanded", node=current_node)
-            for action in self._get_all_available_actions(current_node.state):
+            for action in self._get_all_available_actions(current_node.state, goal):
                 if not action.is_applicable(current_node.state):
                     continue
 
