@@ -111,14 +111,15 @@ class Planner:
         self._logger = logger or logger
 
         # Hook system for middleware
-        self._logger = logger or logger
-
-        # Hook system for middleware
         self.hooks: dict[str, list[Callable[..., Any]]] = {
             "on_node_expanded": [],
             "on_plan_found": [],
             "on_search_failed": [],
         }
+
+        # Search graph tracking (for visualization/debugging)
+        self._search_graph_nodes: dict[int, dict[str, Any]] = {}
+        self._search_graph_edges: list[dict[str, Any]] = []
 
     def _log(self, level: int, msg: str, *args, **kwargs) -> None:
         """Log a message if verbose, always log to logger."""
@@ -316,7 +317,21 @@ class Planner:
         """Internal method to find a plan using A* search."""
         logger.info("Planning to achieve goal: %s", goal)
 
+        # Clear previous search graph
+        self._search_graph_nodes = {}
+        self._search_graph_edges = []
+
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
+        start_id = id(start_node)
+        self._search_graph_nodes[start_id] = {
+            "id": start_id,
+            "state": start_node.state.get_state(),
+            "g": start_node.g_score,
+            "h": start_node.h_score,
+            "f": start_node.f_score,
+            "parent": None,
+            "action": None,
+        }
         frontier: list[tuple[float, int, Node]] = []
         heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
 
@@ -361,6 +376,26 @@ class Planner:
                 g_scores[new_state_key] = tentative_g_score
                 heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
+                # Track in search graph
+                new_id = id(new_node)
+                self._search_graph_nodes[new_id] = {
+                    "id": new_id,
+                    "state": new_node.state.get_state(),
+                    "g": new_node.g_score,
+                    "h": new_node.h_score,
+                    "f": new_node.f_score,
+                    "parent": id(current_node),
+                    "action": action.name,
+                }
+                self._search_graph_edges.append(
+                    {
+                        "from": id(current_node),
+                        "to": new_id,
+                        "action": action.name,
+                        "cost": action.cost,
+                    }
+                )
+
         return None
 
     async def _async_find_plan(
@@ -373,7 +408,21 @@ class Planner:
         """Asynchronously find a plan using A* search."""
         logger.info("Async planning to achieve goal: %s", goal)
 
+        # Clear previous search graph
+        self._search_graph_nodes = {}
+        self._search_graph_edges = []
+
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
+        start_id = id(start_node)
+        self._search_graph_nodes[start_id] = {
+            "id": start_id,
+            "state": start_node.state.get_state(),
+            "g": start_node.g_score,
+            "h": start_node.h_score,
+            "f": start_node.f_score,
+            "parent": None,
+            "action": None,
+        }
         frontier: list[tuple[float, int, Node]] = []
         heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
 
@@ -393,7 +442,7 @@ class Planner:
                 continue
 
             self._trigger_hook("on_node_expanded", node=current_node)
-            for action in self._get_all_available_actions(current_node.state):
+            for action in self._get_all_available_actions(current_node.state, goal):
                 if not action.is_applicable(current_node.state):
                     continue
 
@@ -417,6 +466,26 @@ class Planner:
                 g_scores[new_state_key] = tentative_g_score
                 heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
+                # Track in search graph
+                new_id = id(new_node)
+                self._search_graph_nodes[new_id] = {
+                    "id": new_id,
+                    "state": new_node.state.get_state(),
+                    "g": new_node.g_score,
+                    "h": new_node.h_score,
+                    "f": new_node.f_score,
+                    "parent": id(current_node),
+                    "action": action.name,
+                }
+                self._search_graph_edges.append(
+                    {
+                        "from": id(current_node),
+                        "to": new_id,
+                        "action": action.name,
+                        "cost": action.cost,
+                    }
+                )
+
         return None
 
     def _reconstruct_plan(self, node: Node) -> Plan:
@@ -432,3 +501,30 @@ class Planner:
 
         self.stats.total_cost = total_cost
         return plan
+
+    def get_search_graph(self) -> dict[str, Any]:
+        """Return the search graph from the last planning operation.
+
+        Returns:
+            Dictionary containing nodes and edges of the search graph:
+            {
+                "nodes": {node_id: {id, state, g, h, f, parent, action}},
+                "edges": [{"from", "to", "action", "cost"}],
+                "metadata": {expanded_count, visited_count, max_depth_reached}
+            }
+        """
+        return {
+            "nodes": self._search_graph_nodes,
+            "edges": self._search_graph_edges,
+            "metadata": {
+                "expanded_count": self.stats.nodes_expanded,
+                "visited_count": self.stats.nodes_visited,
+                "max_depth_reached": max(
+                    (
+                        node.get("depth", 0)
+                        for node in self._search_graph_nodes.values()
+                    ),
+                    default=0,
+                ),
+            },
+        }
