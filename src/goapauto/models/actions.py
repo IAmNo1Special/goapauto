@@ -29,6 +29,10 @@ class Equal(Predicate):
 
     value: Any
 
+    def __init__(self, value: Any) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
+
     def __call__(self, other: Any) -> bool:
         return other == self.value
 
@@ -40,6 +44,10 @@ class NotEqual(Predicate):
     """Predicate that checks if a value is not equal to another."""
 
     value: Any
+
+    def __init__(self, value: Any) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
 
     def __call__(self, other: Any) -> bool:
         return other != self.value
@@ -53,6 +61,10 @@ class GreaterThan(Predicate):
 
     value: Union[int, float]
 
+    def __init__(self, value: Union[int, float]) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
+
     def __call__(self, other: Any) -> bool:
         return other > self.value
 
@@ -64,6 +76,10 @@ class LessThan(Predicate):
     """Predicate that checks if a value is less than another."""
 
     value: Union[int, float]
+
+    def __init__(self, value: Union[int, float]) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
 
     def __call__(self, other: Any) -> bool:
         return other < self.value
@@ -92,6 +108,10 @@ class Set(Effect):
 
     value: Any
 
+    def __init__(self, value: Any) -> None:
+        """Initialize the effect, supporting positional arguments."""
+        super().__init__(value=value)
+
     def __call__(self, current_value: Any) -> Any:
         return self.value
 
@@ -104,6 +124,10 @@ class Increment(Effect):
 
     amount: Union[int, float] = 1
 
+    def __init__(self, amount: Union[int, float] = 1) -> None:
+        """Initialize the effect, supporting positional arguments."""
+        super().__init__(amount=amount)
+
     def __call__(self, current_value: Any) -> Any:
         return current_value + self.amount
 
@@ -115,6 +139,10 @@ class Decrement(Effect):
     """Effect that decrements a numeric attribute."""
 
     amount: Union[int, float] = 1
+
+    def __init__(self, amount: Union[int, float] = 1) -> None:
+        """Initialize the effect, supporting positional arguments."""
+        super().__init__(amount=amount)
 
     def __call__(self, current_value: Any) -> Any:
         return current_value - self.amount
@@ -218,7 +246,9 @@ class Action:
                 if callable(effect):
                     # For callable effects (including Effect objects),
                     # pass the current attribute value
-                    current_val = getattr(state, attr)
+                    # Missing attributes are treated as 0 so effects
+                    # like Increment/Decrement can create new attributes
+                    current_val = getattr(state, attr, 0)
                     setattr(new_state, attr, effect(current_val))
                 else:
                     setattr(new_state, attr, effect)
@@ -254,7 +284,7 @@ class Action:
             # Apply each effect to the new state
             for attr, effect in self.effects.items():
                 if callable(effect):
-                    current_val = getattr(state, attr)
+                    current_val = getattr(state, attr, 0)
                     import inspect
 
                     if inspect.iscoroutinefunction(effect):
