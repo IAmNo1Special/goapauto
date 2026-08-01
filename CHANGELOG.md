@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-01
+
+### Fixed
+
+- **Planner**: `max_depth` is now honored in both sync and async planning, limiting search depth via `Node.depth()` instead of being ignored.
+- **Planner**: `PlanStats.total_cost` is now computed as the sum of action costs during plan reconstruction.
+- **Actions**: `Action.apply`/`async_apply` treat missing `WorldState` attributes as `0`, so `Increment`/`Decrement` effects create attributes instead of raising `AttributeError`.
+- **Actions**: `Set`, `Increment`, `Decrement`, `Equal`, `NotEqual`, `GreaterThan`, and `LessThan` now accept positional arguments as documented.
+
+### Changed
+
+- **Tooling**: Replaced `black`/`isort` with `ruff`, and added `mypy` and `mdformat` as dev dependencies. Updated pre-commit hooks and CI accordingly.
+
 ## [0.2.1] - 2026-01-25
 
 ### Added
