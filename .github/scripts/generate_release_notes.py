@@ -13,14 +13,11 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def run_git(*args: str) -> str:
-    result = subprocess.run(
-        ["git", *args], capture_output=True, text=True, check=False
-    )
+    result = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
     return result.stdout.strip()
 
 
@@ -60,9 +57,7 @@ def fetch_commits(prev_tag: str | None, current_tag: str) -> list[dict]:
         if len(parts) != 4:
             continue
         sha, author, date, subject = parts
-        commits.append(
-            {"sha": sha, "author": author, "date": date, "subject": subject}
-        )
+        commits.append({"sha": sha, "author": author, "date": date, "subject": subject})
     return commits
 
 
@@ -128,11 +123,9 @@ def dedupe(commits: list[dict]) -> list[dict]:
 
 def tag_date(current_tag: str) -> str:
     try:
-        return run_git(
-            "log", "-1", "--pretty=format:%ad", "--date=short", current_tag
-        )
+        return run_git("log", "-1", "--pretty=format:%ad", "--date=short", current_tag)
     except Exception:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
 def generate_section(commits: list[dict]) -> str:
@@ -165,9 +158,7 @@ def generate_section(commits: list[dict]) -> str:
     return "\n".join(section).rstrip()
 
 
-def build_changelog_entry(
-    current_tag: str, version: str, commits: list[dict]
-) -> str:
+def build_changelog_entry(current_tag: str, version: str, commits: list[dict]) -> str:
     date = tag_date(current_tag)
     section = generate_section(commits)
     return f"## [{version}] - {date}\n\n{section}"
@@ -177,7 +168,7 @@ def update_changelog(current_tag: str, version: str, commits: list[dict]) -> str
     entry = build_changelog_entry(current_tag, version, commits)
 
     try:
-        with open("CHANGELOG.md", "r", encoding="utf-8") as f:
+        with open("CHANGELOG.md", encoding="utf-8") as f:
             changelog = f.read()
     except FileNotFoundError:
         changelog = (
@@ -201,7 +192,6 @@ def update_changelog(current_tag: str, version: str, commits: list[dict]) -> str
 
 def build_release_notes(current_tag: str, version: str, commits: list[dict]) -> str:
     date = tag_date(current_tag)
-    section = generate_section(commits)
 
     added = []
     fixed = []
@@ -225,7 +215,11 @@ def build_release_notes(current_tag: str, version: str, commits: list[dict]) -> 
     if changed:
         lines += ["", "## 🔧 Other", ""]
         lines += [f"- {m}" for m in changed]
-    lines += ["", "______________________________________________________________________", ""]
+    lines += [
+        "",
+        "______________________________________________________________________",
+        "",
+    ]
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -240,9 +234,7 @@ def main() -> int:
     commits = fetch_commits(prev, current_tag)
     commits = dedupe(commits)
     commits = [
-        c
-        for c in commits
-        if not any(p.search(c["subject"]) for p in SKIP_PATTERNS)
+        c for c in commits if not any(p.search(c["subject"]) for p in SKIP_PATTERNS)
     ]
 
     update_changelog(current_tag, version, commits)
