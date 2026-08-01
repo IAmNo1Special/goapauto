@@ -28,6 +28,7 @@ dev = [
     "mypy>=1.16.0",
     "mdformat>=0.7.22",
     "mdformat-mkdocs>=5.1.0",
+    "mdformat-front-matters>=2.0.0",
 ]
 
 [tool.ruff]

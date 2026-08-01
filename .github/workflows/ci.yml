@@ -25,16 +25,16 @@ jobs:
         run: uv sync --dev
 
       - name: Lint with ruff
-        run: uv run ruff check src/ tests/
+        run: uv run ruff check src/ tests/ .github/scripts/
 
       - name: Check formatting with ruff
-        run: uv run ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/ .github/scripts/
 
       - name: Type check with mypy
         run: uv run mypy src/
 
       - name: Check markdown formatting with mdformat
-        run: uv run mdformat --check docs/ README.md CONTRIBUTING.md CHANGELOG.md RELEASE_NOTES.md
+        run: uv run mdformat --check docs/ README.md CONTRIBUTING.md CHANGELOG.md RELEASE_NOTES.md AGENTS.md
 
   test:
     runs-on: windows-latest
