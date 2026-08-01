@@ -75,6 +75,7 @@ class Planner:
         providers: List of ActionProvider instances
         max_iterations: Maximum number of iterations before giving up
         stats: Statistics about the last planning operation
+        verbose: Whether to print progress to stdout
     """
 
     def __init__(
@@ -84,6 +85,8 @@ class Planner:
         providers: list[ActionProvider] | None = None,
         max_iterations: int = 1000,
         heuristic_fn: HeuristicFn | None = None,
+        verbose: bool = True,
+        logger: logging.Logger | None = None,
     ) -> None:
         """Initialize the planner with optional actions, providers, and config.
 
@@ -92,6 +95,8 @@ class Planner:
             providers: Optional list of ActionProvider instances
             max_iterations: Maximum number of iterations for the search algorithm
             heuristic_fn: Optional default heuristic function
+            verbose: Whether to print progress messages to stdout (default True)
+            logger: Optional custom logger instance (uses module logger if None)
         """
         self.providers = providers or []
         if actions_list:
@@ -102,6 +107,11 @@ class Planner:
         self.max_iterations = max_iterations
         self.stats = PlanStats()
         self.heuristic_fn = heuristic_fn
+        self.verbose = verbose
+        self._logger = logger or logger
+
+        # Hook system for middleware
+        self._logger = logger or logger
 
         # Hook system for middleware
         self.hooks: dict[str, list[Callable[..., Any]]] = {
@@ -109,6 +119,13 @@ class Planner:
             "on_plan_found": [],
             "on_search_failed": [],
         }
+
+    def _log(self, level: int, msg: str, *args, **kwargs) -> None:
+        """Log a message if verbose, always log to logger."""
+        if self._logger:
+            self._logger.log(level, msg, *args, **kwargs)
+        if self.verbose:
+            safe_print(msg, *args, **kwargs)
 
     def register_hook(self, event: str, callback: Callable[..., Any]) -> None:
         """Register a callback for a specific planner event.
@@ -136,15 +153,15 @@ class Planner:
             return
 
         stats = self.stats
-        print("\n" + "=" * 50)
-        print("PLANNING STATISTICS")
-        print("=" * 50)
-        print(f"- Nodes expanded: {stats.nodes_expanded}")
-        print(f"- Nodes visited: {stats.nodes_visited}")
-        print(f"- Plan length: {stats.plan_length}")
-        print(f"- Total cost: {stats.total_cost:.2f}")
-        print(f"- Execution time: {stats.execution_time:.4f} seconds")
-        print("=" * 50 + "\n")
+        self._log(logging.INFO, "\n" + "=" * 50)
+        self._log(logging.INFO, "PLANNING STATISTICS")
+        self._log(logging.INFO, "=" * 50)
+        self._log(logging.INFO, f"- Nodes expanded: {stats.nodes_expanded}")
+        self._log(logging.INFO, f"- Nodes visited: {stats.nodes_visited}")
+        self._log(logging.INFO, f"- Plan length: {stats.plan_length}")
+        self._log(logging.INFO, f"- Total cost: {stats.total_cost:.2f}")
+        self._log(logging.INFO, f"- Execution time: {stats.execution_time:.4f} seconds")
+        self._log(logging.INFO, "=" * 50 + "\n")
 
     def generate_plan(
         self,
@@ -216,13 +233,13 @@ class Planner:
 
     def _print_header(self, goal: Goal | dict[str, Any]) -> None:
         """Print planning header information."""
-        print("\n" + "=" * 50)
-        print("GOAL-ORIENTED ACTION PLANNING")
-        print("=" * 50)
+        self._log(logging.INFO, "\n" + "=" * 50)
+        self._log(logging.INFO, "GOAL-ORIENTED ACTION PLANNING")
+        self._log(logging.INFO, "=" * 50)
         name = getattr(goal, "name", str(goal))
         target = getattr(goal, "target_state", goal)
-        print(f"\nGOAL: {name}")
-        print(f"TARGET STATE: {target}\n")
+        self._log(logging.INFO, f"\nGOAL: {name}")
+        self._log(logging.INFO, f"TARGET STATE: {target}\n")
 
     def _validate_and_convert(
         self, world_state: Any, goal: Any, max_depth: int | None
@@ -233,7 +250,9 @@ class Planner:
                 f"world_state must be a dict or WorldState, got {type(world_state)}"
             )
         if not isinstance(goal, (dict, Goal, WorldState)):
-            raise TypeError(f"goal must be a dict, Goal, or WorldState, got {type(goal)}")
+            raise TypeError(
+                f"goal must be a dict, Goal, or WorldState, got {type(goal)}"
+            )
         if max_depth is not None and max_depth <= 0:
             raise ValueError(f"max_depth must be positive, got {max_depth}")
 
@@ -255,22 +274,22 @@ class Planner:
         self.stats.plan_length = len(plan) if plan else 0
         self.stats.execution_time = time.time() - start_time
 
-        safe_print("\n" + "=" * 50)
-        safe_print("PLAN GENERATION COMPLETE")
-        safe_print("=" * 50)
+        self._log(logging.INFO, "\n" + "=" * 50)
+        self._log(logging.INFO, "PLAN GENERATION COMPLETE")
+        self._log(logging.INFO, "=" * 50)
 
         if plan:
             message = f"[SUCCESS] Found plan with {len(plan)} actions"
-            safe_print(f"\n{message}")
-            safe_print("\nPLAN STEPS:")
+            self._log(logging.INFO, f"\n{message}")
+            self._log(logging.INFO, "\nPLAN STEPS:")
             for i, action_name in enumerate(plan, 1):
-                safe_print(f"  {i}. {action_name}")
+                self._log(logging.INFO, f"  {i}. {action_name}")
             self._display_statistics()
             self._trigger_hook("on_plan_found", plan=plan, stats=self.stats)
             return PlanResult(plan=plan, message=message)
 
         message = "❌ No valid plan found to achieve the goal."
-        print(f"\n{message}")
+        self._log(logging.INFO, f"\n{message}")
         self._display_statistics()
         self._trigger_hook("on_search_failed", stats=self.stats)
         return PlanResult(plan=None, message=message)
