@@ -1,5 +1,8 @@
 from goapauto.models.goal import Goal
-from goapauto.models.goal_arbitrator import GoalArbitrator
+from goapauto.models.goal_arbitrator import (
+    GoalArbitrator,
+    PriorityGoalStrategy,
+)
 from goapauto.models.worldstate import WorldState
 
 
@@ -46,3 +49,21 @@ class TestGoalArbitrator:
 
         arb.remove_goal("Dynamic")
         assert len(arb.goals) == 0
+
+    def test_default_strategy(self):
+        """Test GoalArbitrator uses PriorityGoalStrategy by default."""
+        arb = GoalArbitrator()
+        assert isinstance(arb.strategy, PriorityGoalStrategy)
+
+    def test_priority_strategy_empty(self):
+        """Test PriorityGoalStrategy returns None for empty list."""
+        strategy = PriorityGoalStrategy()
+        assert strategy.select([], WorldState()) is None
+
+    def test_remove_goal_missing(self):
+        """Test removing a non-existent goal is a no-op."""
+        arb = GoalArbitrator()
+        g = Goal(target_state={"a": 1}, priority=1, name="Keep")
+        arb.add_goal(g)
+        arb.remove_goal("Ghost")
+        assert len(arb.goals) == 1

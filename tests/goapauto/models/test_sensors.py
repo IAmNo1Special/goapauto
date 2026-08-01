@@ -8,6 +8,19 @@ class ConcreteSensor(Sensor):
 
 
 class TestSensors:
+    def test_default_constructor(self):
+        """Test SensorManager default constructor with no sensors."""
+        manager = SensorManager()
+        assert manager.sensors == []
+        assert manager.update_state(WorldState()) is not None
+
+    def test_add_sensor(self):
+        """Test adding a sensor after construction."""
+        manager = SensorManager()
+        sensor = ConcreteSensor()
+        manager.add_sensor(sensor)
+        assert manager.sensors == [sensor]
+
     def test_sensor_integration(self):
         """Test that data flows from sensor to state."""
         sensor = ConcreteSensor()
