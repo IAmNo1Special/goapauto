@@ -1,68 +1,15 @@
-# Release 0.2.1: The Polish Update
+# Release 0.2.5
 
-**goapauto 0.2.1** is a patch release focused on stability, API cleanup, and improved developer experience.
+**goapauto 0.2.5** released on 2026-08-01.
 
-## ✨ Improvements
+## 🐛 Bug Fixes
 
-- **Enhanced `Actions` API**: The `Actions.add_actions` and `Planner` initialization now natively supports `Action` objects alongside the legacy 4-tuple format.
-- **Clean Documentation**: Resolved several linting issues in `example1.py` and `example2.py` (unused imports and variables).
+- track deepest expanded node depth in search graph metadata
 
-## 🛠️ Internal
+## 🔧 Other
 
-- Added additional test coverage for mixed-format action collections in `test_actions.py`.
-- Finalized CI/CD dependencies for documentation deployment.
-
-______________________________________________________________________
-
-# Release 0.2.0: The Foundations Update
-
-**goapauto 0.2.0** brings professional-grade tooling and strict architecture to the GOAP planner, establishing a solid foundation for complex AI agents.
-
-## 🌟 Highlights
-
-### 🧠 Goal Arbitration
-
-The new **Arbitration System** allows agents to dynamically select goals based on priority and environment state. This completes the "Sense-Think-Plan-Act" loop.
-
-- **`GoalArbitrator`**: Manages competing goals.
-- **`SensorManager`**: Aggregates environmental data.
-
-### 👁️ Visualizer
-
-Debugging plans just got easier. Use the **Search Tree Visualizer** to export your planner's decision tree to Mermaid or Graphviz.
-
-```python
-viz = SearchTreeVisualizer()
-planner.register_hook("on_node_expanded", viz.on_node_expanded)
-viz.export("planning_process.mmd")
-```
-
-### 🛡️ Strict Typing (Pydantic)
-
-We've migrated all core models (`WorldState`, `Goal`, `Action`) to **Pydantic V2**.
-
-- **Run-time validation**: Catch configuration errors instantly.
-- **Dict-like access**: `WorldState` behaves like a dictionary but validates like a model.
-- **Immutable transitions**: `Action.apply()` is now safer and side-effect free.
-
-### 📚 New Documentation
-
-A complete rewrite of the documentation:
-
-- **User Guide**: From zero to hero.
-- **API Reference**: Detailed signatures for every class.
-- **Architecture Docs**: Understanding the system design.
-
-## 🐞 Fixes
-
-- Standardized `PlanResult` return type (NamedTuple).
-- Fixed AttributeErrors in example scripts.
-- Enforced non-empty target states for Goals.
+- sync lockfile to version 0.2.5
+- automate changelog and release notes generation
+- auto-generate API reference with mkdocstrings
 
 ______________________________________________________________________
-
-*Install the update:*
-
-```bash
-uv add goapauto==0.2.0
-```
