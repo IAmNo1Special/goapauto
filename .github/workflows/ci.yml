@@ -24,11 +24,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Check formatting with black
-        run: uv run black --check src/ tests/
+      - name: Lint with ruff
+        run: uv run ruff check src/ tests/
 
-      - name: Check import sorting with isort
-        run: uv run isort --check-only src/ tests/
+      - name: Check formatting with ruff
+        run: uv run ruff format --check src/ tests/
+
+      - name: Type check with mypy
+        run: uv run mypy src/
+
+      - name: Check markdown formatting with mdformat
+        run: uv run mdformat --check docs/ README.md CONTRIBUTING.md CHANGELOG.md RELEASE_NOTES.md
 
   test:
     runs-on: windows-latest

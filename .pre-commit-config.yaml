@@ -1,14 +1,25 @@
 repos:
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
     hooks:
-      - id: isort
-        name: isort (python)
+      - id: ruff
+      - id: ruff-format
 
-  - repo: https://github.com/psf/black
-    rev: 24.2.0
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.0
     hooks:
-      - id: black
+      - id: mypy
+        args: [src]
+        pass_filenames: false
+        additional_dependencies:
+          - pydantic>=2.12.5
+
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+          - mdformat==1.0.0
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

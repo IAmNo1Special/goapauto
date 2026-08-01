@@ -5,12 +5,12 @@ Thank you for your interest in contributing to goapauto! This document provides 
 ## Getting Started
 
 1. **Fork the repository** on GitHub
-2. **Clone your fork** locally:
+1. **Clone your fork** locally:
    ```bash
    git clone https://github.com/IAmNo1Special/goapauto.git
    cd goapauto
    ```
-3. **Install dependencies** with `uv`:
+1. **Install dependencies** with `uv`:
    ```bash
    uv sync
    ```
@@ -30,20 +30,25 @@ uv run pytest tests/
 ### Making Changes
 
 1. Create a feature branch:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
 
-2. Make your changes following our style guidelines
+1. Make your changes following our style guidelines
 
-3. Run tests and linters:
+1. Run tests and linters:
+
    ```bash
    uv run pytest tests/
-   uv run isort src/ tests/
-   uv run black src/ tests/
+   uv run ruff check src/ tests/
+   uv run ruff format src/ tests/
+   uv run mypy src/
+   uv run mdformat docs/ README.md CONTRIBUTING.md CHANGELOG.md RELEASE_NOTES.md
    ```
 
-4. Commit with [conventional commits](https://www.conventionalcommits.org/):
+1. Commit with [conventional commits](https://www.conventionalcommits.org/):
+
    ```bash
    git commit -m "feat: add new feature"
    git commit -m "fix: resolve bug in controller"
@@ -52,17 +57,18 @@ uv run pytest tests/
 
 ## Code Style
 
-- **Formatter**: [Black](https://black.readthedocs.io/)
-- **Import Sorter**: [isort](https://pycqa.github.io/isort/)
+- **Linter/Formatter**: [Ruff](https://docs.astral.sh/ruff/)
+- **Type Checker**: [mypy](https://mypy-lang.org/)
+- **Markdown Formatter**: [mdformat](https://github.com/hukkin/mdformat)
 - **Style Guide**: [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
 
 ## Pull Request Process
 
 1. Update documentation if needed
-2. Add tests for new functionality
-3. Ensure all tests pass
-4. Update CHANGELOG.md with your changes
-5. Submit PR against `main` branch
+1. Add tests for new functionality
+1. Ensure all tests pass
+1. Update CHANGELOG.md with your changes
+1. Submit PR against `main` branch
 
 ## Questions?
 
