@@ -84,7 +84,15 @@ class Node:
         if action is None:
             return parent.g_score
 
-        return parent.g_score + (action.cost if hasattr(action, "cost") else 1.0)
+        cost = getattr(action, "cost", 1.0)
+        if isinstance(cost, (int, float)):
+            return parent.g_score + float(cost)
+        # For multi-dimensional costs, sum all components as fallback
+        if isinstance(cost, dict):
+            return parent.g_score + sum(float(v) for v in cost.values())
+        if isinstance(cost, list):
+            return parent.g_score + sum(float(v) for v in cost)
+        return parent.g_score + 1.0
 
     @classmethod
     def heuristic(cls, state: WorldState, goal: Goal | dict[str, Any]) -> float:

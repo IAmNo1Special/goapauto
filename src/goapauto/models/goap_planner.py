@@ -80,8 +80,9 @@ class PlanResult(NamedTuple):
 
     plan: Plan | None
     message: str
-    schedule: "Schedule | None" = None
+    schedule: Schedule | None = None
     makespan: float | None = None
+    total_cost: float = 0.0
 
 
 StateKey = int  # Hash of a WorldState
@@ -121,6 +122,7 @@ class Planner:
         heuristic_fn: HeuristicFn | None = None,
         verbose: bool = True,
         logger: logging.Logger | None = None,
+        cost_weights: dict[str, float] | list[float] | None = None,
     ) -> None:
         """Initialize the planner with optional actions, providers, and config.
 
@@ -131,6 +133,10 @@ class Planner:
             heuristic_fn: Optional default heuristic function
             verbose: Whether to print progress messages to stdout (default True)
             logger: Optional custom logger instance (uses module logger if None)
+            cost_weights: Optional weights for multi-dimensional costs.
+                If dict: keys match action cost dict keys (e.g., {"time": 1.0, "energy": 0.5})
+                If list: weights correspond to cost list indices
+                If None: actions must use scalar costs
         """
         self.providers = providers or []
         if actions_list:
@@ -143,6 +149,7 @@ class Planner:
         self.heuristic_fn = heuristic_fn
         self.verbose = verbose
         self._logger = logger or logger
+        self.cost_weights = cost_weights
 
         # Hook system for middleware
         self.hooks: dict[str, list[Callable[..., Any]]] = {
@@ -154,6 +161,44 @@ class Planner:
         # Search graph tracking (for visualization/debugging)
         self._search_graph_nodes: dict[int, dict[str, Any]] = {}
         self._search_graph_edges: list[dict[str, Any]] = []
+
+    def _get_scalar_cost(self, action: Action) -> float:
+        """Compute scalar cost from action's potentially multi-dimensional cost.
+
+        If cost_weights is set, computes weighted sum. Otherwise returns scalar cost.
+        """
+        cost = action.cost
+        if self.cost_weights is None:
+            # Scalar cost - return as-is (convert to float)
+            if isinstance(cost, (int, float)):
+                return float(cost)
+            raise ValueError(
+                "Action has multi-dimensional cost but no cost_weights provided"
+            )
+
+        if isinstance(cost, (int, float)):
+            # Scalar cost with weights - just return it (weights not applicable)
+            return float(cost)
+
+        if isinstance(cost, dict) and isinstance(self.cost_weights, dict):
+            # Both are dicts - compute weighted sum
+            total = 0.0
+            for key, value in cost.items():
+                weight = self.cost_weights.get(key, 0.0)
+                total += float(value) * weight
+            return total
+
+        if isinstance(cost, list) and isinstance(self.cost_weights, list):
+            # Both are lists - compute dot product
+            if len(cost) != len(self.cost_weights):
+                raise ValueError(
+                    "Cost list and cost_weights list must have same length"
+                )
+            return sum(
+                float(c) * w for c, w in zip(cost, self.cost_weights, strict=True)
+            )
+
+        raise ValueError("Incompatible cost and cost_weights types")
 
     def _log(self, level: int, msg: str, *args, **kwargs) -> None:
         """Log a message if verbose, always log to logger."""
@@ -324,7 +369,12 @@ class Planner:
             if self.verbose:
                 self._display_statistics()
             self._trigger_hook("on_plan_found", plan=plan, stats=self.stats)
-            return PlanResult(plan=plan, message=message, schedule=schedule)
+            return PlanResult(
+                plan=plan,
+                message=message,
+                schedule=schedule,
+                total_cost=schedule.total_cost if schedule else self.stats.total_cost,
+            )
 
         message = "❌ No valid plan found to achieve the goal."
         self._log(logging.INFO, f"\n{message}")
@@ -397,7 +447,8 @@ class Planner:
                 self.stats.nodes_expanded += 1
                 new_state = action.apply(current_node.state)
                 new_state_key = hash(new_state)
-                tentative_g_score = current_node.g_score + action.cost
+                action_cost = self._get_scalar_cost(action)
+                tentative_g_score = current_node.g_score + action_cost
 
                 if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
                     continue
@@ -430,7 +481,7 @@ class Planner:
                         "from": id(current_node),
                         "to": new_id,
                         "action": action.name,
-                        "cost": action.cost,
+                        "cost": action_cost,
                     }
                 )
 
@@ -488,7 +539,8 @@ class Planner:
                 self.stats.nodes_expanded += 1
                 new_state = await action.async_apply(current_node.state)
                 new_state_key = hash(new_state)
-                tentative_g_score = current_node.g_score + action.cost
+                action_cost = self._get_scalar_cost(action)
+                tentative_g_score = current_node.g_score + action_cost
 
                 if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
                     continue
@@ -521,7 +573,7 @@ class Planner:
                         "from": id(current_node),
                         "to": new_id,
                         "action": action.name,
-                        "cost": action.cost,
+                        "cost": action_cost,
                     }
                 )
 
@@ -537,7 +589,8 @@ class Planner:
 
         while current.parent is not None and current.action is not None:
             plan.insert(0, current.action.name)
-            total_cost += current.action.cost
+            action_cost = self._get_scalar_cost(current.action)
+            total_cost += action_cost
 
             # Build schedule step if action has duration
             if current.action.duration is not None:
@@ -546,7 +599,7 @@ class Planner:
                     action=current.action.name,
                     start_time=current_time,
                     end_time=current_time + duration,
-                    cost=current.action.cost,
+                    cost=action_cost,
                 )
                 schedule_steps.insert(0, step)
                 current_time += duration
