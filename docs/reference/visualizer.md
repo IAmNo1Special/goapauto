@@ -24,3 +24,35 @@ viz.export("tree.mmd")
 
 - **`clear()`**
   Resets the captured data.
+
+## Search Graph Export
+
+The planner also provides direct access to the search graph data:
+
+```python
+result = planner.generate_plan(state, goal)
+graph = planner.get_search_graph()
+
+# graph structure:
+{
+    "nodes": {
+        node_id: {
+            "id": int,
+            "state": dict,
+            "g": float,      # cost from start
+            "h": float,      # heuristic
+            "f": float,      # total
+            "parent": int,
+            "action": str
+        }
+    },
+    "edges": [
+        {"from": int, "to": int, "action": str, "cost": float}
+    ],
+    "metadata": {
+        "expanded_count": int,
+        "visited_count": int,
+        "max_depth_reached": int
+    }
+}
+```
