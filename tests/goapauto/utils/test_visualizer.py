@@ -1,4 +1,3 @@
-import pytest
 
 from goapauto.models.actions import Action
 from goapauto.models.goal import Goal

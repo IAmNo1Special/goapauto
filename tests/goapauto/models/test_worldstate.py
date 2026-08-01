@@ -1,5 +1,4 @@
 import pytest
-from pydantic import ValidationError
 
 from goapauto.models.worldstate import WorldState
 
