@@ -4,17 +4,12 @@ import heapq
 import logging
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     NamedTuple,
-    Optional,
-    Tuple,
     TypeVar,
-    Union,
 )
 
 from goapauto.models.action_provider import ActionProvider, StaticActionProvider
@@ -45,18 +40,18 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="Planner")
 
 # Type aliases for better readability
-Plan = List[str]
+Plan = list[str]
 
 
 class PlanResult(NamedTuple):
     """Result of a planning operation."""
 
-    plan: Optional[Plan]
+    plan: Plan | None
     message: str
 
 
 StateKey = int  # Hash of a WorldState
-HeuristicFn = Callable[[WorldState, Union[Goal, Dict[str, Any]]], float]
+HeuristicFn = Callable[[WorldState, Goal | dict[str, Any]], float]
 
 
 @dataclass
@@ -84,12 +79,11 @@ class Planner:
 
     def __init__(
         self,
-        actions_list: Optional[
-            List[Tuple[str, Dict[str, Any], Dict[str, Any], float]]
-        ] = None,
-        providers: Optional[List[ActionProvider]] = None,
+        actions_list: list[tuple[str, dict[str, Any], dict[str, Any], float]]
+        | None = None,
+        providers: list[ActionProvider] | None = None,
         max_iterations: int = 1000,
-        heuristic_fn: Optional[HeuristicFn] = None,
+        heuristic_fn: HeuristicFn | None = None,
     ) -> None:
         """Initialize the planner with optional actions, providers, and config.
 
@@ -110,7 +104,7 @@ class Planner:
         self.heuristic_fn = heuristic_fn
 
         # Hook system for middleware
-        self.hooks: Dict[str, List[Callable[..., Any]]] = {
+        self.hooks: dict[str, list[Callable[..., Any]]] = {
             "on_node_expanded": [],
             "on_plan_found": [],
             "on_search_failed": [],
@@ -154,10 +148,10 @@ class Planner:
 
     def generate_plan(
         self,
-        world_state: Union[Dict[str, Any], WorldState],
-        goal: Union[Dict[str, Any], Goal],
-        max_depth: Optional[int] = None,
-        heuristic_fn: Optional[HeuristicFn] = None,
+        world_state: dict[str, Any] | WorldState,
+        goal: dict[str, Any] | Goal,
+        max_depth: int | None = None,
+        heuristic_fn: HeuristicFn | None = None,
     ) -> PlanResult:
         """Generate a plan to achieve the given goal.
 
@@ -193,10 +187,10 @@ class Planner:
 
     async def async_generate_plan(
         self,
-        world_state: Union[Dict[str, Any], WorldState],
-        goal: Union[Dict[str, Any], Goal],
-        max_depth: Optional[int] = None,
-        heuristic_fn: Optional[HeuristicFn] = None,
+        world_state: dict[str, Any] | WorldState,
+        goal: dict[str, Any] | Goal,
+        max_depth: int | None = None,
+        heuristic_fn: HeuristicFn | None = None,
     ) -> PlanResult:
         """Asynchronously generate a plan."""
         import time
@@ -220,7 +214,7 @@ class Planner:
             logger.exception("Error during async planning")
             return PlanResult(plan=None, message=f"❌ Error during planning: {str(e)}")
 
-    def _print_header(self, goal: Goal) -> None:
+    def _print_header(self, goal: Goal | dict[str, Any]) -> None:
         """Print planning header information."""
         print("\n" + "=" * 50)
         print("GOAL-ORIENTED ACTION PLANNING")
@@ -231,8 +225,8 @@ class Planner:
         print(f"TARGET STATE: {target}\n")
 
     def _validate_and_convert(
-        self, world_state: Any, goal: Any, max_depth: Optional[int]
-    ) -> Tuple[WorldState, Goal]:
+        self, world_state: Any, goal: Any, max_depth: int | None
+    ) -> tuple[WorldState, Goal]:
         """Validate inputs and convert to proper types."""
         if not isinstance(world_state, (dict, WorldState)):
             raise TypeError(
@@ -251,7 +245,7 @@ class Planner:
         return world_state, goal
 
     def _finalize_plan_generation(
-        self, plan: Optional[Plan], start_time: float
+        self, plan: Plan | None, start_time: float
     ) -> PlanResult:
         """Finalize stats and print result message."""
         import time
@@ -279,7 +273,7 @@ class Planner:
         self._trigger_hook("on_search_failed", stats=self.stats)
         return PlanResult(plan=None, message=message)
 
-    def _get_all_available_actions(self, state: WorldState) -> List[Action]:
+    def _get_all_available_actions(self, state: WorldState) -> list[Action]:
         """Query all providers for available actions."""
         all_actions = []
         for provider in self.providers:
@@ -293,17 +287,17 @@ class Planner:
         self,
         world_state: WorldState,
         goal: Goal,
-        max_depth: Optional[int],
-        heuristic_fn: Optional[HeuristicFn],
-    ) -> Optional[Plan]:
+        max_depth: int | None,
+        heuristic_fn: HeuristicFn | None,
+    ) -> Plan | None:
         """Internal method to find a plan using A* search."""
         logger.info("Planning to achieve goal: %s", goal)
 
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
-        frontier = []
+        frontier: list[tuple[float, int, Node]] = []
         heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
 
-        g_scores: Dict[StateKey, float] = {hash(world_state): 0}
+        g_scores: dict[StateKey, float] = {hash(world_state): 0}
         iteration = 0
 
         while frontier and iteration < self.max_iterations:
@@ -350,17 +344,17 @@ class Planner:
         self,
         world_state: WorldState,
         goal: Goal,
-        max_depth: Optional[int],
-        heuristic_fn: Optional[HeuristicFn],
-    ) -> Optional[Plan]:
+        max_depth: int | None,
+        heuristic_fn: HeuristicFn | None,
+    ) -> Plan | None:
         """Asynchronously find a plan using A* search."""
         logger.info("Async planning to achieve goal: %s", goal)
 
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
-        frontier = []
+        frontier: list[tuple[float, int, Node]] = []
         heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
 
-        g_scores: Dict[StateKey, float] = {hash(world_state): 0}
+        g_scores: dict[StateKey, float] = {hash(world_state): 0}
         iteration = 0
 
         while frontier and iteration < self.max_iterations:
@@ -404,7 +398,7 @@ class Planner:
 
     def _reconstruct_plan(self, node: Node) -> Plan:
         """Reconstruct the plan from the goal node back to the start."""
-        plan = []
+        plan: Plan = []
         total_cost = 0.0
         current = node
 

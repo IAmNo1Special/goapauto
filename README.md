@@ -6,12 +6,12 @@
 ![Release](https://img.shields.io/github/v/release/IAmNo1Special/goapauto)
 ![License](https://img.shields.io/github/license/IAmNo1Special/goapauto)
 
-`goapauto` provides a modular framework for AI decision-making using A* search. It separates **Perception** (Sensors), **Thinking** (Arbitration), **Planning** (A*), and **Acting** (Actions), making it ideal for game AI, NPCs, and simulation bots.
+`goapauto` provides a modular framework for AI decision-making using A\* search. It separates **Perception** (Sensors), **Thinking** (Arbitration), **Planning** (A\*), and **Acting** (Actions), making it ideal for game AI, NPCs, and simulation bots.
 
 ## 🚀 Key Features (v0.2.0)
 
 - 🎯 **Goal Arbitration**: Dynamically select the best goal based on priority and state.
-- 🧠 **Smart Planning**: A* pathfinding finds the optimal sequence of actions.
+- 🧠 **Smart Planning**: A\* pathfinding finds the optimal sequence of actions.
 - 🛡️ **Type Safety**: Built on [Pydantic](https://docs.pydantic.dev/) for strict validation and robustness.
 - 👁️ **Visualizer**: Export search trees to [Mermaid](https://mermaid.js.org/) or Graphviz for debugging.
 - 🔌 **Modular Architecture**: Decoupled components for `WorldState`, `Sensors`, and `Goals`.
@@ -67,6 +67,7 @@ print(f"Plan to '{goal.name}': {result.plan}")
 ## 🛠️ Advanced Tooling
 
 ### Visualization
+
 Debug your planner's decision-making process by exporting the search tree:
 
 ```python
@@ -86,6 +87,7 @@ viz.export("planning_tree.mmd")
 GoapAuto includes a built-in search tree visualizer that hooks into the planning process to capture every explored node.
 
 ### Capturing the Search Tree
+
 Register the visualizer hook with the planner before generating a plan:
 
 ```python
@@ -98,13 +100,15 @@ viz.export("search_tree.md")
 ```
 
 ### Branching and Complexity
-Simple planning problems often result in linear "chains". To see A* explore multiple branches, provide actions with overlapping effects or varying costs.
 
-See [examples/complex_search_demo.py](file:///f:/AI/goapauto/examples/complex_search_demo.py) for a scenario that demonstrates branching search trees.
+Simple planning problems often result in linear "chains". To see A\* explore multiple branches, provide actions with overlapping effects or varying costs.
+
+See \[examples/complex_search_demo.py\](file:///f:/AI/goapauto/examples/complex_search_demo.py) for a scenario that demonstrates branching search trees.
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## 📄 License
+
 MIT License. See [LICENSE](LICENSE).
