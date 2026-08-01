@@ -89,6 +89,25 @@ class LessThan(Predicate):
         return f"< {self.value}"
 
 
+class Range(Predicate):
+    """Predicate that checks if a value is within a range (inclusive)."""
+
+    min_value: int | float
+    max_value: int | float
+
+    def __init__(self, min_value: int | float, max_value: int | float) -> None:
+        """Initialize the range predicate with inclusive bounds."""
+        if min_value > max_value:
+            raise ValueError("min_value must be <= max_value")
+        super().__init__(min_value=min_value, max_value=max_value)
+
+    def __call__(self, other: Any) -> bool:
+        return self.min_value <= other <= self.max_value
+
+    def __str__(self) -> str:
+        return f"{self.min_value} <= x <= {self.max_value}"
+
+
 class Effect(BaseModel, ABC):
     """Base class for state effects.
 
