@@ -1,18 +1,22 @@
-name: Release to PyPI
+name: Release
 
 on:
     push:
         tags:
             - "v*"
 
-jobs:
-    build-and-publish:
-        runs-on: ubuntu-latest
-        permissions:
-            id-token: write # Required for trusted publishing
+permissions:
+    contents: write
+    id-token: write
 
+jobs:
+    release:
+        runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0  # need full history for changelog
 
             - name: Install uv
               uses: astral-sh/setup-uv@v1
@@ -20,8 +24,28 @@ jobs:
                   version: "latest"
                   enable-cache: true
 
-            - name: Set up Python
-              run: uv python install 3.13
+            - name: Generate changelog and release notes
+              run: |
+                  python3 .github/scripts/generate_release_notes.py "${{ github.ref_name }}"
+
+            - name: Commit changelog and release notes
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git checkout main
+                  git add CHANGELOG.md RELEASE_NOTES.md
+                  git commit -m "chore: update changelog and release notes for ${{ github.ref_name }}" || echo "No changes to commit"
+                  git push
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  tag_name: ${{ github.ref_name }}
+                  body_path: RELEASE_NOTES.md
+                  draft: false
+                  prerelease: false
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Build package
               run: uv build
