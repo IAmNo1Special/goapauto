@@ -1,4 +1,3 @@
-
 import pytest
 
 from goapauto.models.actions import Actions, Increment

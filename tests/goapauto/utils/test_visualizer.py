@@ -1,4 +1,3 @@
-
 from goapauto.models.actions import Action
 from goapauto.models.goal import Goal
 from goapauto.models.node import Node
