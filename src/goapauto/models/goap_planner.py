@@ -282,6 +282,103 @@ class Planner:
             logger.exception("Error during planning")
             return PlanResult(plan=None, message=f"❌ Error during planning: {str(e)}")
 
+    def continue_plan(
+        self,
+        world_state: dict[str, Any] | WorldState,
+        goal: dict[str, Any] | Goal,
+        executed_actions: list[str],
+        max_depth: int | None = None,
+        heuristic_fn: HeuristicFn | None = None,
+    ) -> PlanResult:
+        """Continue planning from a checkpoint after executing some actions.
+
+        This allows incremental replanning by reusing the already-executed actions
+        and finding the remainder of the plan from the current state.
+
+        Args:
+            world_state: The current state of the world (after executing actions)
+            goal: The goal to achieve
+            executed_actions: List of action names that have already been executed
+            max_depth: Optional maximum depth for the search
+            heuristic_fn: Optional custom heuristic function for this plan
+
+        Returns:
+            PlanResult with the remaining plan steps
+        """
+        import time
+
+        self._print_header(goal)
+        start_time = time.time()
+        self.stats = PlanStats()
+        h_fn = heuristic_fn or self.heuristic_fn
+
+        try:
+            world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
+
+            if goal.is_satisfied(world_state):
+                self.stats.execution_time = time.time() - start_time
+                return PlanResult(plan=[], message="✅ Goal is already satisfied!")
+
+            # Find plan from current state
+            plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
+
+            if not plan:
+                return self._finalize_plan_generation([], None, start_time)
+
+            # Filter out already executed actions from the beginning of the plan
+            remaining_plan = []
+            executed_set = set(executed_actions)
+            skip_count = 0
+
+            for action_name in plan:
+                if action_name in executed_set and skip_count < len(executed_actions):
+                    skip_count += 1
+                    continue
+                remaining_plan.append(action_name)
+
+            if not remaining_plan:
+                self.stats.execution_time = time.time() - start_time
+                return PlanResult(
+                    plan=[],
+                    message="✅ All executed actions complete the plan!",
+                    schedule=None,
+                )
+
+            # Build schedule for remaining actions if original had schedule
+            remaining_schedule = None
+            if hasattr(self, "_reconstruct_plan"):
+                # We could rebuild schedule for remaining actions, but for simplicity
+                # just return the remaining plan without schedule
+                pass
+
+            self.stats.plan_length = len(remaining_plan)
+            self.stats.execution_time = time.time() - start_time
+
+            self._log(logging.INFO, "\n" + "=" * 50)
+            self._log(logging.INFO, "CONTINUED PLAN GENERATION COMPLETE")
+            self._log(logging.INFO, "=" * 50)
+
+            self._log(
+                logging.INFO,
+                f"\n[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
+            )
+            self._log(logging.INFO, "\nPLAN STEPS:")
+            for i, action_name in enumerate(remaining_plan, 1):
+                self._log(logging.INFO, f"  {i}. {action_name}")
+            self._display_statistics()
+            self._trigger_hook("on_plan_found", plan=remaining_plan, stats=self.stats)
+
+            return PlanResult(
+                plan=remaining_plan,
+                message=f"[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
+            )
+
+        except Exception as e:
+            logger.exception("Error during continued planning")
+            return PlanResult(
+                plan=None, message=f"❌ Error during continued planning: {str(e)}"
+            )
+
     async def async_generate_plan(
         self,
         world_state: dict[str, Any] | WorldState,
