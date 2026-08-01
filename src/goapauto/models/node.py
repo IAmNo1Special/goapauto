@@ -84,7 +84,15 @@ class Node:
         if action is None:
             return parent.g_score
 
-        return parent.g_score + (action.cost if hasattr(action, "cost") else 1.0)
+        cost = getattr(action, "cost", 1.0)
+        if isinstance(cost, (int, float)):
+            return parent.g_score + float(cost)
+        # For multi-dimensional costs, sum all components as fallback
+        if isinstance(cost, dict):
+            return parent.g_score + sum(float(v) for v in cost.values())
+        if isinstance(cost, list):
+            return parent.g_score + sum(float(v) for v in cost)
+        return parent.g_score + 1.0
 
     @classmethod
     def heuristic(cls, state: WorldState, goal: Goal | dict[str, Any]) -> float:
@@ -120,6 +128,56 @@ class Node:
             )
 
         raise TypeError(f"goal must be a Goal or dict, got {type(goal)}")
+
+    @classmethod
+    def numeric_heuristic(cls, state: WorldState, goal: Goal | dict[str, Any]) -> float:
+        """Calculate a numeric-aware heuristic for numeric goal values.
+
+        This heuristic computes a more informed distance for numeric goal values
+        by using the absolute difference between current and target values,
+        rather than just counting unsatisfied conditions.
+
+        Args:
+            state: The current world state
+            goal: Either a Goal object or a dictionary of goal conditions
+
+        Returns:
+            float: The heuristic value representing estimated distance to goal
+        """
+        if not isinstance(state, WorldState):
+            raise TypeError(f"state must be a WorldState, got {type(state)}")
+
+        total_distance = 0.0
+
+        if hasattr(goal, "target_state"):  # It's a Goal object
+            target_state = goal.target_state
+        elif isinstance(goal, dict):
+            target_state = goal
+        else:
+            raise TypeError(f"goal must be a Goal or dict, got {type(goal)}")
+
+        for attr, desired in target_state.items():
+            current = getattr(state, attr, None)
+
+            # Handle callable predicates (GreaterThan, LessThan, Range, etc.)
+            if callable(desired):
+                if not desired(current):
+                    # For callables, we can't compute numeric distance easily
+                    # Fall back to counting as 1 unsatisfied
+                    total_distance += 1.0
+                continue
+
+            # Handle numeric targets
+            if isinstance(desired, (int, float)):
+                if current is None or not isinstance(current, (int, float)):
+                    total_distance += abs(desired) + 1.0  # Penalize missing/non-numeric
+                else:
+                    total_distance += abs(desired - current)
+            elif current != desired:
+                # Non-numeric mismatch
+                total_distance += 1.0
+
+        return total_distance
 
     def get_path(self) -> list[Action]:
         """Reconstruct the path from the start node to this node.

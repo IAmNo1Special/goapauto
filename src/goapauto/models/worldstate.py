@@ -6,8 +6,13 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
+from goapauto.models.actions import _UNSET_SENTINEL, Decrement, Effect, Increment, Set
+
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="WorldState")
+
+# Sentinel for unknown/missing values (distinct from False/None)
+_UNKNOWN = object()
 
 
 class WorldState(BaseModel):
@@ -53,9 +58,46 @@ class WorldState(BaseModel):
         """Return a view of state values."""
         return self.__dict__.values()
 
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get a state value with a default if it doesn't exist."""
+    def get(self, key: str, default: Any = _UNKNOWN) -> Any:
+        """Get a state value with a default if it doesn't exist.
+
+        If default is not provided and key is not set, returns _UNKNOWN sentinel
+        which allows distinguishing between "not set" and "explicitly set to None/False".
+        """
         return getattr(self, key, default)
+
+    def is_known(self, key: str) -> bool:
+        """Check if an attribute has been explicitly set in the state.
+
+        Returns:
+            True if the attribute was explicitly set (even to None/False),
+            False if the attribute was never set.
+        """
+        return key in self.model_fields_set
+
+    def _apply_effect(self, attr: str, effect: Any) -> None:
+        """Apply an effect to the state, handling special effect types."""
+        if isinstance(effect, Set):
+            setattr(self, attr, effect.value)
+        elif isinstance(effect, Increment):
+            current = getattr(self, attr, 0)
+            setattr(self, attr, current + effect.amount)
+        elif isinstance(effect, Decrement):
+            current = getattr(self, attr, 0)
+            setattr(self, attr, current - effect.amount)
+        elif isinstance(effect, Effect):
+            # Generic Effect: call it with current value
+            current = getattr(self, attr, 0)
+            result = effect(current)
+            if result is _UNSET_SENTINEL:
+                # Unset effect - remove the attribute
+                if hasattr(self, attr):
+                    delattr(self, attr)
+            else:
+                setattr(self, attr, result)
+        else:
+            # Plain value
+            setattr(self, attr, effect)
 
     def update(self, other: dict[str, Any] | WorldState, **kwargs: Any) -> None:
         """Update the state with values from a dictionary or another WorldState."""
@@ -65,9 +107,9 @@ class WorldState(BaseModel):
             updates = other
 
         for k, v in updates.items():
-            setattr(self, k, v)
+            self._apply_effect(k, v)
         for k, v in kwargs.items():
-            setattr(self, k, v)
+            self._apply_effect(k, v)
 
     def clear(self) -> None:
         """Clear all state values."""

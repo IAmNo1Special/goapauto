@@ -43,11 +43,46 @@ T = TypeVar("T", bound="Planner")
 Plan = list[str]
 
 
+@dataclass
+class ScheduleStep:
+    """A single step in a temporal schedule."""
+
+    action: str
+    start_time: float
+    end_time: float
+    cost: float
+
+
+@dataclass
+class Schedule:
+    """Temporal schedule for a plan with action start/end times."""
+
+    steps: list[ScheduleStep]
+    makespan: float
+    total_cost: float
+
+    def to_list(self) -> list[dict]:
+        """Convert to list of dicts for serialization."""
+        return [
+            {
+                "action": step.action,
+                "start_time": step.start_time,
+                "end_time": step.end_time,
+                "duration": step.end_time - step.start_time,
+                "cost": step.cost,
+            }
+            for step in self.steps
+        ]
+
+
 class PlanResult(NamedTuple):
     """Result of a planning operation."""
 
     plan: Plan | None
     message: str
+    schedule: Schedule | None = None
+    makespan: float | None = None
+    total_cost: float = 0.0
 
 
 StateKey = int  # Hash of a WorldState
@@ -75,6 +110,7 @@ class Planner:
         providers: List of ActionProvider instances
         max_iterations: Maximum number of iterations before giving up
         stats: Statistics about the last planning operation
+        verbose: Whether to print progress to stdout
     """
 
     def __init__(
@@ -84,6 +120,9 @@ class Planner:
         providers: list[ActionProvider] | None = None,
         max_iterations: int = 1000,
         heuristic_fn: HeuristicFn | None = None,
+        verbose: bool = True,
+        logger: logging.Logger | None = None,
+        cost_weights: dict[str, float] | list[float] | None = None,
     ) -> None:
         """Initialize the planner with optional actions, providers, and config.
 
@@ -92,6 +131,12 @@ class Planner:
             providers: Optional list of ActionProvider instances
             max_iterations: Maximum number of iterations for the search algorithm
             heuristic_fn: Optional default heuristic function
+            verbose: Whether to print progress messages to stdout (default True)
+            logger: Optional custom logger instance (uses module logger if None)
+            cost_weights: Optional weights for multi-dimensional costs.
+                If dict: keys match action cost dict keys (e.g., {"time": 1.0, "energy": 0.5})
+                If list: weights correspond to cost list indices
+                If None: actions must use scalar costs
         """
         self.providers = providers or []
         if actions_list:
@@ -102,6 +147,9 @@ class Planner:
         self.max_iterations = max_iterations
         self.stats = PlanStats()
         self.heuristic_fn = heuristic_fn
+        self.verbose = verbose
+        self._logger = logger or logger
+        self.cost_weights = cost_weights
 
         # Hook system for middleware
         self.hooks: dict[str, list[Callable[..., Any]]] = {
@@ -109,6 +157,55 @@ class Planner:
             "on_plan_found": [],
             "on_search_failed": [],
         }
+
+        # Search graph tracking (for visualization/debugging)
+        self._search_graph_nodes: dict[int, dict[str, Any]] = {}
+        self._search_graph_edges: list[dict[str, Any]] = []
+
+    def _get_scalar_cost(self, action: Action) -> float:
+        """Compute scalar cost from action's potentially multi-dimensional cost.
+
+        If cost_weights is set, computes weighted sum. Otherwise returns scalar cost.
+        """
+        cost = action.cost
+        if self.cost_weights is None:
+            # Scalar cost - return as-is (convert to float)
+            if isinstance(cost, (int, float)):
+                return float(cost)
+            raise ValueError(
+                "Action has multi-dimensional cost but no cost_weights provided"
+            )
+
+        if isinstance(cost, (int, float)):
+            # Scalar cost with weights - just return it (weights not applicable)
+            return float(cost)
+
+        if isinstance(cost, dict) and isinstance(self.cost_weights, dict):
+            # Both are dicts - compute weighted sum
+            total = 0.0
+            for key, value in cost.items():
+                weight = self.cost_weights.get(key, 0.0)
+                total += float(value) * weight
+            return total
+
+        if isinstance(cost, list) and isinstance(self.cost_weights, list):
+            # Both are lists - compute dot product
+            if len(cost) != len(self.cost_weights):
+                raise ValueError(
+                    "Cost list and cost_weights list must have same length"
+                )
+            return sum(
+                float(c) * w for c, w in zip(cost, self.cost_weights, strict=True)
+            )
+
+        raise ValueError("Incompatible cost and cost_weights types")
+
+    def _log(self, level: int, msg: str, *args, **kwargs) -> None:
+        """Log a message if verbose, always log to logger."""
+        if self._logger:
+            self._logger.log(level, msg, *args, **kwargs)
+        if self.verbose:
+            safe_print(msg, *args, **kwargs)
 
     def register_hook(self, event: str, callback: Callable[..., Any]) -> None:
         """Register a callback for a specific planner event.
@@ -136,15 +233,15 @@ class Planner:
             return
 
         stats = self.stats
-        print("\n" + "=" * 50)
-        print("PLANNING STATISTICS")
-        print("=" * 50)
-        print(f"- Nodes expanded: {stats.nodes_expanded}")
-        print(f"- Nodes visited: {stats.nodes_visited}")
-        print(f"- Plan length: {stats.plan_length}")
-        print(f"- Total cost: {stats.total_cost:.2f}")
-        print(f"- Execution time: {stats.execution_time:.4f} seconds")
-        print("=" * 50 + "\n")
+        self._log(logging.INFO, "\n" + "=" * 50)
+        self._log(logging.INFO, "PLANNING STATISTICS")
+        self._log(logging.INFO, "=" * 50)
+        self._log(logging.INFO, f"- Nodes expanded: {stats.nodes_expanded}")
+        self._log(logging.INFO, f"- Nodes visited: {stats.nodes_visited}")
+        self._log(logging.INFO, f"- Plan length: {stats.plan_length}")
+        self._log(logging.INFO, f"- Total cost: {stats.total_cost:.2f}")
+        self._log(logging.INFO, f"- Execution time: {stats.execution_time:.4f} seconds")
+        self._log(logging.INFO, "=" * 50 + "\n")
 
     def generate_plan(
         self,
@@ -178,12 +275,108 @@ class Planner:
                 self.stats.execution_time = time.time() - start_time
                 return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-            plan = self._find_plan(world_state, goal, max_depth, h_fn)
-            return self._finalize_plan_generation(plan, start_time)
+            plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
+            return self._finalize_plan_generation(plan, schedule, start_time)
 
         except Exception as e:
             logger.exception("Error during planning")
             return PlanResult(plan=None, message=f"❌ Error during planning: {str(e)}")
+
+    def continue_plan(
+        self,
+        world_state: dict[str, Any] | WorldState,
+        goal: dict[str, Any] | Goal,
+        executed_actions: list[str],
+        max_depth: int | None = None,
+        heuristic_fn: HeuristicFn | None = None,
+    ) -> PlanResult:
+        """Continue planning from a checkpoint after executing some actions.
+
+        This allows incremental replanning by reusing the already-executed actions
+        and finding the remainder of the plan from the current state.
+
+        Args:
+            world_state: The current state of the world (after executing actions)
+            goal: The goal to achieve
+            executed_actions: List of action names that have already been executed
+            max_depth: Optional maximum depth for the search
+            heuristic_fn: Optional custom heuristic function for this plan
+
+        Returns:
+            PlanResult with the remaining plan steps
+        """
+        import time
+
+        self._print_header(goal)
+        start_time = time.time()
+        self.stats = PlanStats()
+        h_fn = heuristic_fn or self.heuristic_fn
+
+        try:
+            world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
+
+            if goal.is_satisfied(world_state):
+                self.stats.execution_time = time.time() - start_time
+                return PlanResult(plan=[], message="✅ Goal is already satisfied!")
+
+            # Find plan from current state
+            plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
+
+            if not plan:
+                return self._finalize_plan_generation([], None, start_time)
+
+            # Filter out already executed actions from the beginning of the plan
+            remaining_plan = []
+            executed_set = set(executed_actions)
+            skip_count = 0
+
+            for action_name in plan:
+                if action_name in executed_set and skip_count < len(executed_actions):
+                    skip_count += 1
+                    continue
+                remaining_plan.append(action_name)
+
+            if not remaining_plan:
+                self.stats.execution_time = time.time() - start_time
+                return PlanResult(
+                    plan=[],
+                    message="✅ All executed actions complete the plan!",
+                    schedule=None,
+                )
+
+            # Skip already-executed actions from the beginning of the plan
+            if hasattr(self, "_reconstruct_plan"):
+                # We could rebuild schedule for remaining actions, but for simplicity
+                # just return the remaining plan without schedule
+                pass
+
+            self.stats.plan_length = len(remaining_plan)
+            self.stats.execution_time = time.time() - start_time
+
+            self._log(logging.INFO, "\n" + "=" * 50)
+            self._log(logging.INFO, "CONTINUED PLAN GENERATION COMPLETE")
+            self._log(logging.INFO, "=" * 50)
+
+            self._log(
+                logging.INFO,
+                f"\n[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
+            )
+            self._log(logging.INFO, "\nPLAN STEPS:")
+            for i, action_name in enumerate(remaining_plan, 1):
+                self._log(logging.INFO, f"  {i}. {action_name}")
+            self._display_statistics()
+            self._trigger_hook("on_plan_found", plan=remaining_plan, stats=self.stats)
+
+            return PlanResult(
+                plan=remaining_plan,
+                message=f"[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
+            )
+
+        except Exception as e:
+            logger.exception("Error during continued planning")
+            return PlanResult(
+                plan=None, message=f"❌ Error during continued planning: {str(e)}"
+            )
 
     async def async_generate_plan(
         self,
@@ -207,8 +400,10 @@ class Planner:
                 self.stats.execution_time = time.time() - start_time
                 return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-            plan = await self._async_find_plan(world_state, goal, max_depth, h_fn)
-            return self._finalize_plan_generation(plan, start_time)
+            plan, schedule = await self._async_find_plan(
+                world_state, goal, max_depth, h_fn
+            )
+            return self._finalize_plan_generation(plan, schedule, start_time)
 
         except Exception as e:
             logger.exception("Error during async planning")
@@ -216,13 +411,13 @@ class Planner:
 
     def _print_header(self, goal: Goal | dict[str, Any]) -> None:
         """Print planning header information."""
-        print("\n" + "=" * 50)
-        print("GOAL-ORIENTED ACTION PLANNING")
-        print("=" * 50)
+        self._log(logging.INFO, "\n" + "=" * 50)
+        self._log(logging.INFO, "GOAL-ORIENTED ACTION PLANNING")
+        self._log(logging.INFO, "=" * 50)
         name = getattr(goal, "name", str(goal))
         target = getattr(goal, "target_state", goal)
-        print(f"\nGOAL: {name}")
-        print(f"TARGET STATE: {target}\n")
+        self._log(logging.INFO, f"\nGOAL: {name}")
+        self._log(logging.INFO, f"TARGET STATE: {target}\n")
 
     def _validate_and_convert(
         self, world_state: Any, goal: Any, max_depth: int | None
@@ -232,8 +427,10 @@ class Planner:
             raise TypeError(
                 f"world_state must be a dict or WorldState, got {type(world_state)}"
             )
-        if not isinstance(goal, (dict, Goal)):
-            raise TypeError(f"goal must be a dict or Goal, got {type(goal)}")
+        if not isinstance(goal, (dict, Goal, WorldState)):
+            raise TypeError(
+                f"goal must be a dict, Goal, or WorldState, got {type(goal)}"
+            )
         if max_depth is not None and max_depth <= 0:
             raise ValueError(f"max_depth must be positive, got {max_depth}")
 
@@ -241,11 +438,13 @@ class Planner:
             world_state = WorldState(**world_state)
         if isinstance(goal, dict):
             goal = Goal(target_state=goal)
+        elif isinstance(goal, WorldState):
+            goal = Goal(target_state=goal.get_state())
 
         return world_state, goal
 
     def _finalize_plan_generation(
-        self, plan: Plan | None, start_time: float
+        self, plan: Plan | None, schedule: Schedule | None, start_time: float
     ) -> PlanResult:
         """Finalize stats and print result message."""
         import time
@@ -253,32 +452,40 @@ class Planner:
         self.stats.plan_length = len(plan) if plan else 0
         self.stats.execution_time = time.time() - start_time
 
-        safe_print("\n" + "=" * 50)
-        safe_print("PLAN GENERATION COMPLETE")
-        safe_print("=" * 50)
+        self._log(logging.INFO, "\n" + "=" * 50)
+        self._log(logging.INFO, "PLAN GENERATION COMPLETE")
+        self._log(logging.INFO, "=" * 50)
 
         if plan:
             message = f"[SUCCESS] Found plan with {len(plan)} actions"
-            safe_print(f"\n{message}")
-            safe_print("\nPLAN STEPS:")
+            self._log(logging.INFO, f"\n{message}")
+            self._log(logging.INFO, "\nPLAN STEPS:")
             for i, action_name in enumerate(plan, 1):
-                safe_print(f"  {i}. {action_name}")
-            self._display_statistics()
+                self._log(logging.INFO, f"  {i}. {action_name}")
+            if self.verbose:
+                self._display_statistics()
             self._trigger_hook("on_plan_found", plan=plan, stats=self.stats)
-            return PlanResult(plan=plan, message=message)
+            return PlanResult(
+                plan=plan,
+                message=message,
+                schedule=schedule,
+                total_cost=schedule.total_cost if schedule else self.stats.total_cost,
+            )
 
         message = "❌ No valid plan found to achieve the goal."
-        print(f"\n{message}")
+        self._log(logging.INFO, f"\n{message}")
         self._display_statistics()
         self._trigger_hook("on_search_failed", stats=self.stats)
         return PlanResult(plan=None, message=message)
 
-    def _get_all_available_actions(self, state: WorldState) -> list[Action]:
+    def _get_all_available_actions(
+        self, state: WorldState, goal: Goal | None = None
+    ) -> list[Action]:
         """Query all providers for available actions."""
         all_actions = []
         for provider in self.providers:
             try:
-                all_actions.extend(provider.provide_actions(state))
+                all_actions.extend(provider.provide_actions(state, goal))
             except Exception as e:
                 logger.error("Error providing actions from %s: %s", provider, e)
         return all_actions
@@ -289,11 +496,25 @@ class Planner:
         goal: Goal,
         max_depth: int | None,
         heuristic_fn: HeuristicFn | None,
-    ) -> Plan | None:
+    ) -> tuple[Plan, Schedule | None]:
         """Internal method to find a plan using A* search."""
         logger.info("Planning to achieve goal: %s", goal)
 
+        # Clear previous search graph
+        self._search_graph_nodes = {}
+        self._search_graph_edges = []
+
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
+        start_id = id(start_node)
+        self._search_graph_nodes[start_id] = {
+            "id": start_id,
+            "state": start_node.state.get_state(),
+            "g": start_node.g_score,
+            "h": start_node.h_score,
+            "f": start_node.f_score,
+            "parent": None,
+            "action": None,
+        }
         frontier: list[tuple[float, int, Node]] = []
         heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
 
@@ -306,7 +527,8 @@ class Planner:
             _, _, current_node = heapq.heappop(frontier)
 
             if goal.is_satisfied(current_node.state):
-                return self._reconstruct_plan(current_node)
+                plan, schedule = self._reconstruct_plan(current_node)
+                return plan, schedule
 
             current_state_key = hash(current_node.state)
             if current_node.g_score > g_scores.get(current_state_key, float("inf")):
@@ -314,14 +536,15 @@ class Planner:
 
             # Phase 2: Use ActionProviders
             self._trigger_hook("on_node_expanded", node=current_node)
-            for action in self._get_all_available_actions(current_node.state):
+            for action in self._get_all_available_actions(current_node.state, goal):
                 if not action.is_applicable(current_node.state):
                     continue
 
                 self.stats.nodes_expanded += 1
                 new_state = action.apply(current_node.state)
                 new_state_key = hash(new_state)
-                tentative_g_score = current_node.g_score + action.cost
+                action_cost = self._get_scalar_cost(action)
+                tentative_g_score = current_node.g_score + action_cost
 
                 if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
                     continue
@@ -338,7 +561,27 @@ class Planner:
                 g_scores[new_state_key] = tentative_g_score
                 heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
-        return None
+                # Track in search graph
+                new_id = id(new_node)
+                self._search_graph_nodes[new_id] = {
+                    "id": new_id,
+                    "state": new_node.state.get_state(),
+                    "g": new_node.g_score,
+                    "h": new_node.h_score,
+                    "f": new_node.f_score,
+                    "parent": id(current_node),
+                    "action": action.name,
+                }
+                self._search_graph_edges.append(
+                    {
+                        "from": id(current_node),
+                        "to": new_id,
+                        "action": action.name,
+                        "cost": action_cost,
+                    }
+                )
+
+        return [], None
 
     async def _async_find_plan(
         self,
@@ -346,11 +589,25 @@ class Planner:
         goal: Goal,
         max_depth: int | None,
         heuristic_fn: HeuristicFn | None,
-    ) -> Plan | None:
+    ) -> tuple[Plan, Schedule | None]:
         """Asynchronously find a plan using A* search."""
         logger.info("Async planning to achieve goal: %s", goal)
 
+        # Clear previous search graph
+        self._search_graph_nodes = {}
+        self._search_graph_edges = []
+
         start_node = Node(world_state, None, goal, heuristic_fn=heuristic_fn)
+        start_id = id(start_node)
+        self._search_graph_nodes[start_id] = {
+            "id": start_id,
+            "state": start_node.state.get_state(),
+            "g": start_node.g_score,
+            "h": start_node.h_score,
+            "f": start_node.f_score,
+            "parent": None,
+            "action": None,
+        }
         frontier: list[tuple[float, int, Node]] = []
         heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
 
@@ -363,21 +620,23 @@ class Planner:
             _, _, current_node = heapq.heappop(frontier)
 
             if goal.is_satisfied(current_node.state):
-                return self._reconstruct_plan(current_node)
+                plan, schedule = self._reconstruct_plan(current_node)
+                return plan, schedule
 
             current_state_key = hash(current_node.state)
             if current_node.g_score > g_scores.get(current_state_key, float("inf")):
                 continue
 
             self._trigger_hook("on_node_expanded", node=current_node)
-            for action in self._get_all_available_actions(current_node.state):
+            for action in self._get_all_available_actions(current_node.state, goal):
                 if not action.is_applicable(current_node.state):
                     continue
 
                 self.stats.nodes_expanded += 1
                 new_state = await action.async_apply(current_node.state)
                 new_state_key = hash(new_state)
-                tentative_g_score = current_node.g_score + action.cost
+                action_cost = self._get_scalar_cost(action)
+                tentative_g_score = current_node.g_score + action_cost
 
                 if tentative_g_score >= g_scores.get(new_state_key, float("inf")):
                     continue
@@ -394,18 +653,90 @@ class Planner:
                 g_scores[new_state_key] = tentative_g_score
                 heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
 
-        return None
+                # Track in search graph
+                new_id = id(new_node)
+                self._search_graph_nodes[new_id] = {
+                    "id": new_id,
+                    "state": new_node.state.get_state(),
+                    "g": new_node.g_score,
+                    "h": new_node.h_score,
+                    "f": new_node.f_score,
+                    "parent": id(current_node),
+                    "action": action.name,
+                }
+                self._search_graph_edges.append(
+                    {
+                        "from": id(current_node),
+                        "to": new_id,
+                        "action": action.name,
+                        "cost": action_cost,
+                    }
+                )
 
-    def _reconstruct_plan(self, node: Node) -> Plan:
-        """Reconstruct the plan from the goal node back to the start."""
+        return [], None
+
+    def _reconstruct_plan(self, node: Node) -> tuple[Plan, Schedule | None]:
+        """Reconstruct the plan and schedule from the goal node back to the start."""
         plan: Plan = []
+        schedule_steps: list[ScheduleStep] = []
         total_cost = 0.0
+        current_time = 0.0
         current = node
 
         while current.parent is not None and current.action is not None:
             plan.insert(0, current.action.name)
-            total_cost += current.action.cost
+            action_cost = self._get_scalar_cost(current.action)
+            total_cost += action_cost
+
+            # Build schedule step if action has duration
+            if current.action.duration is not None:
+                duration = current.action.duration
+                step = ScheduleStep(
+                    action=current.action.name,
+                    start_time=current_time,
+                    end_time=current_time + duration,
+                    cost=action_cost,
+                )
+                schedule_steps.insert(0, step)
+                current_time += duration
+
             current = current.parent
 
         self.stats.total_cost = total_cost
-        return plan
+
+        # Create schedule if any actions have duration
+        schedule = None
+        if schedule_steps:
+            makespan = max(step.end_time for step in schedule_steps)
+            schedule = Schedule(
+                steps=schedule_steps, makespan=makespan, total_cost=total_cost
+            )
+
+        return plan, schedule
+
+    def get_search_graph(self) -> dict[str, Any]:
+        """Return the search graph from the last planning operation.
+
+        Returns:
+            Dictionary containing nodes and edges of the search graph:
+            {
+                "nodes": {node_id: {id, state, g, h, f, parent, action}},
+                "edges": [{"from", "to", "action", "cost"}],
+                "metadata": {expanded_count, visited_count, max_depth_reached}
+            }
+        """
+        return {
+            "nodes": self._search_graph_nodes,
+            "edges": self._search_graph_edges,
+            "metadata": {
+                "expanded_count": self.stats.nodes_expanded,
+                "visited_count": self.stats.nodes_visited,
+                "max_depth_reached": max(
+                    (
+                        node.get("depth", 0)
+                        for node in self._search_graph_nodes.values()
+                    ),
+                    default=0,
+                ),
+            },
+        }

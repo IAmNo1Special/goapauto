@@ -48,10 +48,14 @@ class Goal(BaseModel):
             bool: True if all conditions in target_state are satisfied.
         """
         try:
-            return all(
-                getattr(world_state, attr) == value
-                for attr, value in self.target_state.items()
-            )
+            for attr, desired in self.target_state.items():
+                current = getattr(world_state, attr, None)
+                if callable(desired):
+                    if not desired(current):
+                        return False
+                elif current != desired:
+                    return False
+            return True
         except AttributeError as e:
             logger.error("Error checking goal satisfaction: %s", str(e))
             return False
@@ -61,11 +65,15 @@ class Goal(BaseModel):
     ) -> dict[str, tuple[Any, Any]]:
         """Get the conditions that are not satisfied in the current world state."""
         try:
-            return {
-                attr: (getattr(world_state, attr, None), desired_value)
-                for attr, desired_value in self.target_state.items()
-                if getattr(world_state, attr, None) != desired_value
-            }
+            unsatisfied = {}
+            for attr, desired in self.target_state.items():
+                current = getattr(world_state, attr, None)
+                if callable(desired):
+                    if not desired(current):
+                        unsatisfied[attr] = (current, desired)
+                elif current != desired:
+                    unsatisfied[attr] = (current, desired)
+            return unsatisfied
         except Exception as e:
             logger.error("Error getting unsatisfied conditions: %s", str(e))
             raise

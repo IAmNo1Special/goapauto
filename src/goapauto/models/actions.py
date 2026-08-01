@@ -89,6 +89,25 @@ class LessThan(Predicate):
         return f"< {self.value}"
 
 
+class Range(Predicate):
+    """Predicate that checks if a value is within a range (inclusive)."""
+
+    min_value: int | float
+    max_value: int | float
+
+    def __init__(self, min_value: int | float, max_value: int | float) -> None:
+        """Initialize the range predicate with inclusive bounds."""
+        if min_value > max_value:
+            raise ValueError("min_value must be <= max_value")
+        super().__init__(min_value=min_value, max_value=max_value)
+
+    def __call__(self, other: Any) -> bool:
+        return self.min_value <= other <= self.max_value
+
+    def __str__(self) -> str:
+        return f"{self.min_value} <= x <= {self.max_value}"
+
+
 class Effect(BaseModel, ABC):
     """Base class for state effects.
 
@@ -152,6 +171,29 @@ class Decrement(Effect):
         return f"-= {self.amount}"
 
 
+class Unset(Effect):
+    """Effect that removes an attribute from the state."""
+
+    def __init__(self) -> None:
+        """Initialize the unset effect."""
+        super().__init__()
+
+    def __call__(self, current_value: Any) -> Any:
+        # Return a sentinel to signal deletion
+        return _UNSET_SENTINEL
+
+    def __str__(self) -> str:
+        return "unset"
+
+
+# Sentinel object to signal attribute removal
+_UNSET_SENTINEL = object()
+
+
+# Public alias for Unset
+Delete = Unset
+
+
 @dataclass
 class Action:
     """Represents an action the agent can take.
@@ -160,13 +202,16 @@ class Action:
         name: Unique identifier for the action
         preconditions: Dictionary of state requirements that must be met for the action to be applicable
         effects: Dictionary of state changes that result from applying this action
-        cost: The cost of executing this action (used for pathfinding)
+        cost: The cost of executing this action (used for pathfinding). Can be a single float
+              or a dict/list for multi-dimensional costs (e.g., {"time": 30.0, "energy": 5.0}).
+        duration: Optional duration in seconds (for temporal planning)
     """
 
     name: str
     preconditions: dict[str, Any | Predicate | Callable[[Any], bool]]
     effects: dict[str, Any | Effect | Callable[[Any], Any]]
-    cost: int = 1
+    cost: int | float | dict[str, float] | list[float] = 1
+    duration: float | None = None
 
     def __post_init__(self) -> None:
         """Validate the action after initialization."""
@@ -176,8 +221,22 @@ class Action:
             raise TypeError("Preconditions must be a dictionary")
         if not isinstance(self.effects, dict):
             raise TypeError("Effects must be a dictionary")
-        if not isinstance(self.cost, (int, float)) or self.cost <= 0:
-            raise ValueError("Cost must be a positive number")
+        if not isinstance(self.cost, (int, float, dict, list)):
+            raise TypeError("Cost must be a number, dict, or list")
+        if isinstance(self.cost, (int, float)) and self.cost <= 0:
+            raise ValueError("Cost must be positive")
+        if isinstance(self.cost, dict):
+            if not all(
+                isinstance(v, (int, float)) and v >= 0 for v in self.cost.values()
+            ):
+                raise ValueError("All cost dict values must be non-negative numbers")
+        if isinstance(self.cost, list):
+            if not all(isinstance(v, (int, float)) and v >= 0 for v in self.cost):
+                raise ValueError("All cost list values must be non-negative numbers")
+        if self.duration is not None and not isinstance(self.duration, (int, float)):
+            raise TypeError("Duration must be a number")
+        if self.duration is not None and self.duration < 0:
+            raise ValueError("Duration must be non-negative")
 
     def is_applicable(self, state: Any) -> bool:
         """Check if this action can be applied to the given state.
