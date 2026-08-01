@@ -40,23 +40,23 @@ class WorldState(BaseModel):
 
     def __contains__(self, key: str) -> bool:
         """Check if a state key exists."""
-        return key in self.__dict__
+        return key in self.model_dump()
 
     def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         """Iterate over state keys."""
-        return iter(self.__dict__)
+        return iter(self.model_dump())
 
     def items(self) -> Any:
         """Return a view of (key, value) pairs."""
-        return self.__dict__.items()
+        return self.model_dump().items()
 
     def keys(self) -> Any:
         """Return a view of state keys."""
-        return self.__dict__.keys()
+        return self.model_dump().keys()
 
     def values(self) -> Any:
         """Return a view of state values."""
-        return self.__dict__.values()
+        return self.model_dump().values()
 
     def get(self, key: str, default: Any = _UNKNOWN) -> Any:
         """Get a state value with a default if it doesn't exist.
@@ -113,9 +113,11 @@ class WorldState(BaseModel):
 
     def clear(self) -> None:
         """Clear all state values."""
-        # Pydantic models aren't really meant to be cleared,
-        # but we can clear the __dict__ if it's dynamic
-        self.__dict__.clear()
+        for key in list(self.model_dump()):
+            self.__dict__.pop(key, None)
+        extra = getattr(self, "__pydantic_extra__", None)
+        if extra is not None:
+            extra.clear()
 
     def copy(self: T, deep: bool = False) -> T:  # type: ignore[override]
         """Create a copy of this WorldState."""
@@ -129,11 +131,11 @@ class WorldState(BaseModel):
 
     def __len__(self) -> int:
         """Get the number of state values."""
-        return len(self.__dict__)
+        return len(self.model_dump())
 
     def __bool__(self) -> bool:
         """Check if the state is non-empty."""
-        return bool(self.__dict__)
+        return bool(self.model_dump())
 
     def get_state(self) -> dict[str, Any]:
         """Get a copy of the current state as a dictionary."""

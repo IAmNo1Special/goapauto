@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import heapq
+import io
 import logging
 import os
 import sys
@@ -20,10 +21,13 @@ from goapauto.models.worldstate import WorldState
 
 # Set up console for Windows to support Unicode
 if os.name == "nt":
-    import io
-    import sys
-
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="ignore")
+    try:
+        # Mutate the existing stream instead of rebinding sys.stdout so
+        # pytest capture and other frameworks keep a valid reference.
+        sys.stdout.reconfigure(encoding="utf-8", errors="ignore")  # type: ignore[union-attr]
+    except (AttributeError, io.UnsupportedOperation, ValueError):
+        # stdout may be a StringIO, already closed, or not reconfigure-able.
+        pass
 
 
 def safe_print(*args, **kwargs):
@@ -687,9 +691,8 @@ class Planner:
     def _reconstruct_plan(self, node: Node) -> tuple[Plan, Schedule | None]:
         """Reconstruct the plan and schedule from the goal node back to the start."""
         plan: Plan = []
-        schedule_steps: list[ScheduleStep] = []
+        schedule_steps: list[tuple[str, float, float]] = []
         total_cost = 0.0
-        current_time = 0.0
         current = node
 
         while current.parent is not None and current.action is not None:
@@ -697,17 +700,12 @@ class Planner:
             action_cost = self._get_scalar_cost(current.action)
             total_cost += action_cost
 
-            # Build schedule step if action has duration
+            # Collect (name, duration, cost) in execution order (start -> end)
             if current.action.duration is not None:
-                duration = current.action.duration
-                step = ScheduleStep(
-                    action=current.action.name,
-                    start_time=current_time,
-                    end_time=current_time + duration,
-                    cost=action_cost,
+                schedule_steps.insert(
+                    0,
+                    (current.action.name, current.action.duration, action_cost),
                 )
-                schedule_steps.insert(0, step)
-                current_time += duration
 
             current = current.parent
 
@@ -716,10 +714,20 @@ class Planner:
         # Create schedule if any actions have duration
         schedule = None
         if schedule_steps:
-            makespan = max(step.end_time for step in schedule_steps)
-            schedule = Schedule(
-                steps=schedule_steps, makespan=makespan, total_cost=total_cost
-            )
+            steps: list[ScheduleStep] = []
+            current_time = 0.0
+            for name, duration, action_cost in schedule_steps:
+                steps.append(
+                    ScheduleStep(
+                        action=name,
+                        start_time=current_time,
+                        end_time=current_time + duration,
+                        cost=action_cost,
+                    )
+                )
+                current_time += duration
+            makespan = max(step.end_time for step in steps)
+            schedule = Schedule(steps=steps, makespan=makespan, total_cost=total_cost)
 
         return plan, schedule
 
