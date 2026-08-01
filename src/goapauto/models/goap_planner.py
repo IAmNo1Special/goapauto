@@ -344,8 +344,7 @@ class Planner:
                     schedule=None,
                 )
 
-            # Build schedule for remaining actions if original had schedule
-            remaining_schedule = None
+            # Skip already-executed actions from the beginning of the plan
             if hasattr(self, "_reconstruct_plan"):
                 # We could rebuild schedule for remaining actions, but for simplicity
                 # just return the remaining plan without schedule
