@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from goapauto.models.actions import Action, Actions
 from goapauto.models.worldstate import WorldState
@@ -14,7 +14,7 @@ class ActionProvider(Protocol):
     available to the planner based on the current world state.
     """
 
-    def provide_actions(self, state: WorldState) -> List[Action]:
+    def provide_actions(self, state: WorldState) -> list[Action]:
         """Provide a list of actions available for the given state.
 
         Args:
@@ -32,5 +32,5 @@ class StaticActionProvider:
     def __init__(self, actions: Actions) -> None:
         self.actions = actions
 
-    def provide_actions(self, state: WorldState) -> List[Action]:
+    def provide_actions(self, state: WorldState) -> list[Action]:
         return self.actions.get_actions()

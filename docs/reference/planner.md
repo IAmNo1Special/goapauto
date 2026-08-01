@@ -2,7 +2,7 @@
 
 ## `goapauto.models.goap_planner.Planner`
 
-The A* search engine used to find a plan.
+The A\* search engine used to find a plan.
 
 ```python
 from goapauto.models.goap_planner import Planner

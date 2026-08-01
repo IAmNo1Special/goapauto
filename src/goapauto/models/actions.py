@@ -1,7 +1,8 @@
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -29,6 +30,10 @@ class Equal(Predicate):
 
     value: Any
 
+    def __init__(self, value: Any) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
+
     def __call__(self, other: Any) -> bool:
         return other == self.value
 
@@ -41,6 +46,10 @@ class NotEqual(Predicate):
 
     value: Any
 
+    def __init__(self, value: Any) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
+
     def __call__(self, other: Any) -> bool:
         return other != self.value
 
@@ -51,7 +60,11 @@ class NotEqual(Predicate):
 class GreaterThan(Predicate):
     """Predicate that checks if a value is greater than another."""
 
-    value: Union[int, float]
+    value: int | float
+
+    def __init__(self, value: int | float) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
 
     def __call__(self, other: Any) -> bool:
         return other > self.value
@@ -63,7 +76,11 @@ class GreaterThan(Predicate):
 class LessThan(Predicate):
     """Predicate that checks if a value is less than another."""
 
-    value: Union[int, float]
+    value: int | float
+
+    def __init__(self, value: int | float) -> None:
+        """Initialize the predicate, supporting positional arguments."""
+        super().__init__(value=value)
 
     def __call__(self, other: Any) -> bool:
         return other < self.value
@@ -92,6 +109,10 @@ class Set(Effect):
 
     value: Any
 
+    def __init__(self, value: Any) -> None:
+        """Initialize the effect, supporting positional arguments."""
+        super().__init__(value=value)
+
     def __call__(self, current_value: Any) -> Any:
         return self.value
 
@@ -102,7 +123,11 @@ class Set(Effect):
 class Increment(Effect):
     """Effect that increments a numeric attribute."""
 
-    amount: Union[int, float] = 1
+    amount: int | float = 1
+
+    def __init__(self, amount: int | float = 1) -> None:
+        """Initialize the effect, supporting positional arguments."""
+        super().__init__(amount=amount)
 
     def __call__(self, current_value: Any) -> Any:
         return current_value + self.amount
@@ -114,7 +139,11 @@ class Increment(Effect):
 class Decrement(Effect):
     """Effect that decrements a numeric attribute."""
 
-    amount: Union[int, float] = 1
+    amount: int | float = 1
+
+    def __init__(self, amount: int | float = 1) -> None:
+        """Initialize the effect, supporting positional arguments."""
+        super().__init__(amount=amount)
 
     def __call__(self, current_value: Any) -> Any:
         return current_value - self.amount
@@ -135,8 +164,8 @@ class Action:
     """
 
     name: str
-    preconditions: Dict[str, Union[Any, Predicate, Callable[[Any], bool]]]
-    effects: Dict[str, Union[Any, Effect, Callable[[Any], Any]]]
+    preconditions: dict[str, Any | Predicate | Callable[[Any], bool]]
+    effects: dict[str, Any | Effect | Callable[[Any], Any]]
     cost: int = 1
 
     def __post_init__(self) -> None:
@@ -218,7 +247,9 @@ class Action:
                 if callable(effect):
                     # For callable effects (including Effect objects),
                     # pass the current attribute value
-                    current_val = getattr(state, attr)
+                    # Missing attributes are treated as 0 so effects
+                    # like Increment/Decrement can create new attributes
+                    current_val = getattr(state, attr, 0)
                     setattr(new_state, attr, effect(current_val))
                 else:
                     setattr(new_state, attr, effect)
@@ -254,7 +285,7 @@ class Action:
             # Apply each effect to the new state
             for attr, effect in self.effects.items():
                 if callable(effect):
-                    current_val = getattr(state, attr)
+                    current_val = getattr(state, attr, 0)
                     import inspect
 
                     if inspect.iscoroutinefunction(effect):
@@ -296,13 +327,13 @@ class Actions:
 
     def __init__(self) -> None:
         """Initialize an empty collection of actions."""
-        self._actions: List[Action] = []
+        self._actions: list[Action] = []
 
     def add_action(
         self,
         name: str,
-        preconditions: Dict[str, Any],
-        effects: Dict[str, Any],
+        preconditions: dict[str, Any],
+        effects: dict[str, Any],
         cost: int = 1,
     ) -> None:
         """Add a single action to the collection.
@@ -331,7 +362,7 @@ class Actions:
             logger.error("Failed to add action %s: %s", name, str(e))
             raise
 
-    def add_actions(self, action_definitions: List[tuple]) -> None:
+    def add_actions(self, action_definitions: list[tuple]) -> None:
         """Add multiple actions to the collection.
 
         Args:
@@ -367,7 +398,7 @@ class Actions:
                 logger.error("Error adding action at index %d: %s", i, str(e))
                 raise
 
-    def get_action(self, name: str) -> Optional[Action]:
+    def get_action(self, name: str) -> Action | None:
         """Retrieve an action by its name.
 
         Args:
@@ -384,7 +415,7 @@ class Actions:
                 return action
         return None
 
-    def get_actions(self) -> List[Action]:
+    def get_actions(self) -> list[Action]:
         """Get a list of all actions in the collection.
 
         Returns:
@@ -397,7 +428,7 @@ class Actions:
         self._actions.clear()
         logger.info("Cleared all actions")
 
-    def filter_actions(self, state: Any) -> List[Action]:
+    def filter_actions(self, state: Any) -> list[Action]:
         """Get a list of all actions that can be applied to the given state.
 
         Args:
@@ -408,7 +439,7 @@ class Actions:
         """
         return [action for action in self._actions if action.is_applicable(state)]
 
-    def __iter__(self) -> "Actions":
+    def __iter__(self) -> Iterator[Action]:
         """Return an iterator over all actions."""
         return iter(self._actions)
 

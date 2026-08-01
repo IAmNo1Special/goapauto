@@ -14,7 +14,8 @@ Brief description of the changes in this PR.
 ## Testing
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] All new and existing tests pass (`uv run pytest tests/`)
-- [ ] Code is formatted (`uv run black src/ tests/` and `uv run isort src/ tests/`)
+- [ ] Code is linted and formatted (`uv run ruff check src/ tests/` and `uv run ruff format --check src/ tests/`)
+- [ ] Types check (`uv run mypy src/`)
 
 ## Checklist
 - [ ] My code follows the project's style guidelines

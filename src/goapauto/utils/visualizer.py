@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
 
 from goapauto.models.node import Node
 
@@ -17,8 +16,8 @@ class SearchTreeVisualizer:
     """
 
     def __init__(self) -> None:
-        self.nodes: Dict[int, Node] = {}
-        self.edges: List[tuple] = []
+        self.nodes: dict[int, Node] = {}
+        self.edges: list[tuple] = []
 
     def on_node_expanded(self, node: Node) -> None:
         """Capture a node and its connection to its parent.
@@ -67,7 +66,7 @@ class SearchTreeVisualizer:
 
         for node_id, node in self.nodes.items():
             f_score = f"{node.f_score:.1f}"
-            label = f'{node.action.name if node.action else "Root"}\nf={f_score}'
+            label = f"{node.action.name if node.action else 'Root'}\nf={f_score}"
             lines.append(f'    {node_id} [label="{label}"];')
 
         for parent_id, child_id, action_name in self.edges:

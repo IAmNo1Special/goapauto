@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from goapauto.models.worldstate import WorldState
 
@@ -14,7 +14,7 @@ class Sensor(ABC):
     """
 
     @abstractmethod
-    def sense(self) -> Dict[str, Any]:
+    def sense(self) -> dict[str, Any]:
         """Perceive the environment.
 
         Returns:
@@ -26,7 +26,7 @@ class Sensor(ABC):
 class SensorManager:
     """Manages a collection of sensors and updates WorldState."""
 
-    def __init__(self, sensors: Optional[List[Sensor]] = None) -> None:
+    def __init__(self, sensors: list[Sensor] | None = None) -> None:
         self.sensors = sensors or []
 
     def add_sensor(self, sensor: Sensor) -> None:

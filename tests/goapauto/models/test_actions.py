@@ -35,6 +35,20 @@ class TestPredicatesAndEffects:
         assert Increment(amount=5)(10) == 15
         assert Decrement(amount=3)(10) == 7
 
+    def test_predicates_positional_args(self):
+        """Test predicates accept positional arguments as shown in docs."""
+        assert Equal(5)(5)
+        assert NotEqual(5)(6)
+        assert GreaterThan(10)(15)
+        assert LessThan(10)(5)
+
+    def test_effects_positional_args(self):
+        """Test effects accept positional arguments as shown in docs."""
+        assert Set("kitchen")(None) == "kitchen"
+        assert Increment(5)(10) == 15
+        assert Decrement(3)(10) == 7
+        assert Increment()(10) == 11  # Default amount
+
 
 class TestActionModel:
     def test_action_applicability(self):
@@ -70,6 +84,21 @@ class TestActionModel:
 
         # Ensure original state is untouched (immutability)
         assert state.wood == 0
+
+    def test_action_application_missing_attr(self):
+        """Test applying Increment/Decrement effects to missing attributes."""
+        action = Action(
+            name="heal",
+            preconditions={},
+            effects={"health_level": Increment(amount=10)},
+            cost=1.0,
+        )
+
+        state = WorldState(medicine_current=100)
+        new_state = action.apply(state)
+
+        # Missing attribute treated as 0, so Increment creates it
+        assert new_state.health_level == 10
 
     @pytest.mark.asyncio
     async def test_async_apply(self):

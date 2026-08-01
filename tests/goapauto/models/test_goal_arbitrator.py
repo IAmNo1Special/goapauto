@@ -1,7 +1,5 @@
-import pytest
-
 from goapauto.models.goal import Goal
-from goapauto.models.goal_arbitrator import GoalArbitrator, PriorityGoalStrategy
+from goapauto.models.goal_arbitrator import GoalArbitrator
 from goapauto.models.worldstate import WorldState
 
 

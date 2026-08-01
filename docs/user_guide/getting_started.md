@@ -3,6 +3,7 @@
 This guide explains how to use `goapauto` to build intelligent agents.
 
 ## 1. Define the World State
+
 The `WorldState` is the agent's memory or belief about the world. It is initialized with keyword arguments.
 
 ```python
@@ -17,6 +18,7 @@ state = WorldState(
 ```
 
 ## 2. Define Actions
+
 Actions transform the state. They have **preconditions** (requirements) and **effects** (changes).
 
 ```python
@@ -43,6 +45,7 @@ move_to_kitchen = Action(
 ```
 
 ## 3. Define Goals
+
 A `Goal` describes a target state the agent wants to reach.
 
 ```python
@@ -55,6 +58,7 @@ goal = Goal(
 ```
 
 ## 4. Run the Planner
+
 Feed the actions into the `Planner` and request a plan to the goal.
 
 ```python
@@ -76,6 +80,7 @@ else:
 ```
 
 ## 5. Execution (Advanced)
+
 In a real game loop, you would Execute the first action in the plan, then re-evaluate the state or re-plan.
 
 See `examples/example1.py` for a complete runnable bot.

@@ -26,18 +26,22 @@ action = Action(
 - **`async_apply(state: Any) -> WorldState`**
   Coroutine version of `apply` for async contexts.
 
----
+______________________________________________________________________
 
 ## Predicates & Effects
 
 ### `goapauto.models.actions.Predicate`
+
 Base class for conditions.
+
 - **`Equal(value)`**: Checks equality.
 - **`GreaterThan(value)`**: Checks `state_val > value`.
 - **`LessThan(value)`**: Checks `state_val < value`.
 
 ### `goapauto.models.actions.Effect`
+
 Base class for state mutations.
+
 - **`Set(value)`**: Sets attribute to value.
 - **`Increment(amount=1)`**: Adds amount.
 - **`Decrement(amount=1)`**: Subtracts amount.

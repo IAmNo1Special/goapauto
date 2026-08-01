@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from goapauto.models.goal import Goal
 from goapauto.models.worldstate import WorldState
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class GoalSelectionStrategy(Protocol):
     """Protocol for goal selection strategies."""
 
-    def select(self, goals: List[Goal], state: WorldState) -> Optional[Goal]:
+    def select(self, goals: list[Goal], state: WorldState) -> Goal | None:
         """Select the best goal to pursue."""
         ...
 
@@ -21,7 +21,7 @@ class GoalSelectionStrategy(Protocol):
 class PriorityGoalStrategy:
     """Selects the goal with the highest priority (lowest number)."""
 
-    def select(self, goals: List[Goal], state: WorldState) -> Optional[Goal]:
+    def select(self, goals: list[Goal], state: WorldState) -> Goal | None:
         if not goals:
             return None
         return min(goals, key=lambda g: g.priority)
@@ -36,8 +36,8 @@ class GoalArbitrator:
 
     def __init__(
         self,
-        goals: Optional[List[Goal]] = None,
-        strategy: Optional[GoalSelectionStrategy] = None,
+        goals: list[Goal] | None = None,
+        strategy: GoalSelectionStrategy | None = None,
     ) -> None:
         self.goals = goals or []
         self.strategy = strategy or PriorityGoalStrategy()
@@ -50,7 +50,7 @@ class GoalArbitrator:
         """Remove a goal by name."""
         self.goals = [g for g in self.goals if g.name != name]
 
-    def select_goal(self, state: WorldState) -> Optional[Goal]:
+    def select_goal(self, state: WorldState) -> Goal | None:
         """Select the best goal to pursue using the current strategy.
 
         Args:

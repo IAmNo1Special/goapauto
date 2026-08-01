@@ -1,5 +1,3 @@
-import pytest
-
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 
@@ -49,6 +47,6 @@ class TestSensors:
         manager.update_state(state)
 
         # Good data should still be present
-        assert state.ok == True
+        assert state.ok is True
         # Error should be logged
         assert "Sensor error" in caplog.text

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from goapauto.models.actions import Action
 from goapauto.models.goal import Goal
@@ -31,12 +32,11 @@ class Node:
     def __init__(
         self,
         state: WorldState,
-        parent: Optional[Node],
-        goal: Union[Goal, Dict[str, Any]],
-        action: Optional[Action] = None,
-        heuristic_fn: Optional[
-            Callable[[WorldState, Union[Goal, Dict[str, Any]]], float]
-        ] = None,
+        parent: Node | None,
+        goal: Goal | dict[str, Any],
+        action: Action | None = None,
+        heuristic_fn: Callable[[WorldState, Goal | dict[str, Any]], float]
+        | None = None,
     ) -> None:
         """Initialize a new Node in the search tree.
 
@@ -68,9 +68,7 @@ class Node:
         # Calculate f-score (total score for A*)
         self.f_score = self.g_score + self.h_score
 
-    def _calculate_g_score(
-        self, parent: Optional[Node], action: Optional[Action]
-    ) -> float:
+    def _calculate_g_score(self, parent: Node | None, action: Action | None) -> float:
         """Calculate the g-score for this node.
 
         Args:
@@ -89,7 +87,7 @@ class Node:
         return parent.g_score + (action.cost if hasattr(action, "cost") else 1.0)
 
     @classmethod
-    def heuristic(cls, state: WorldState, goal: Union[Goal, Dict[str, Any]]) -> float:
+    def heuristic(cls, state: WorldState, goal: Goal | dict[str, Any]) -> float:
         """Calculate the heuristic value for a state relative to a goal.
 
         The heuristic estimates the cost from the current state to the goal.
@@ -123,14 +121,14 @@ class Node:
 
         raise TypeError(f"goal must be a Goal or dict, got {type(goal)}")
 
-    def get_path(self) -> List[Action]:
+    def get_path(self) -> list[Action]:
         """Reconstruct the path from the start node to this node.
 
         Returns:
             List[Action]: The sequence of actions from start to this node
         """
         path = []
-        current = self
+        current: Node | None = self
 
         while current is not None and current.action is not None:
             path.append(current.action)
@@ -138,14 +136,14 @@ class Node:
 
         return list(reversed(path))
 
-    def get_path_with_states(self) -> List[Tuple[Optional[Action], WorldState]]:
+    def get_path_with_states(self) -> list[tuple[Action | None, WorldState]]:
         """Reconstruct the path with both actions and states.
 
         Returns:
             List of tuples containing (action, resulting_state) pairs
         """
         path = []
-        current = self
+        current: Node | None = self
 
         while current is not None:
             path.append((current.action, current.state))

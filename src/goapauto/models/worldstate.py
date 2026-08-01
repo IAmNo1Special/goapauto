@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterator, Type, TypeVar, Union
+from collections.abc import Iterator
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -36,7 +37,7 @@ class WorldState(BaseModel):
         """Check if a state key exists."""
         return key in self.__dict__
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         """Iterate over state keys."""
         return iter(self.__dict__)
 
@@ -56,7 +57,7 @@ class WorldState(BaseModel):
         """Get a state value with a default if it doesn't exist."""
         return getattr(self, key, default)
 
-    def update(self, other: Union[Dict[str, Any], "WorldState"], **kwargs: Any) -> None:
+    def update(self, other: dict[str, Any] | WorldState, **kwargs: Any) -> None:
         """Update the state with values from a dictionary or another WorldState."""
         if isinstance(other, WorldState):
             updates = other.model_dump()
@@ -74,7 +75,7 @@ class WorldState(BaseModel):
         # but we can clear the __dict__ if it's dynamic
         self.__dict__.clear()
 
-    def copy(self: T, deep: bool = False) -> T:
+    def copy(self: T, deep: bool = False) -> T:  # type: ignore[override]
         """Create a copy of this WorldState."""
         return super().model_copy(deep=deep)
 
@@ -92,24 +93,24 @@ class WorldState(BaseModel):
         """Check if the state is non-empty."""
         return bool(self.__dict__)
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Get a copy of the current state as a dictionary."""
         return self.model_dump()
 
-    def update_state(self, updates: Dict[str, Any]) -> None:
+    def update_state(self, updates: dict[str, Any]) -> None:
         """Update multiple state values at once."""
         self.update(updates)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the state to a dictionary."""
         return self.model_dump()
 
     @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
+    def from_dict(cls: type[T], data: dict[str, Any]) -> T:
         """Create a new WorldState from a dictionary."""
         return cls(**data)
 
-    def diff(self, other: "WorldState") -> Dict[str, tuple[Any, Any]]:
+    def diff(self, other: WorldState) -> dict[str, tuple[Any, Any]]:
         """Get the differences between this state and another."""
         if not isinstance(other, WorldState):
             raise TypeError(

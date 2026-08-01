@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -17,9 +17,9 @@ class Goal(BaseModel):
     higher priority (e.g., priority 1 is higher than priority 2).
     """
 
-    target_state: Dict[str, Any]
+    target_state: dict[str, Any]
     priority: int = Field(default=1, ge=1)
-    name: Optional[str] = None
+    name: str | None = None
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -28,7 +28,7 @@ class Goal(BaseModel):
 
     @field_validator("target_state")
     @classmethod
-    def validate_target_state(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_target_state(cls, v: dict[str, Any]) -> dict[str, Any]:
         if not v:
             raise ValueError("target_state cannot be empty")
         return v
@@ -58,7 +58,7 @@ class Goal(BaseModel):
 
     def get_unsatisfied_conditions(
         self, world_state: Any
-    ) -> Dict[str, tuple[Any, Any]]:
+    ) -> dict[str, tuple[Any, Any]]:
         """Get the conditions that are not satisfied in the current world state."""
         try:
             return {

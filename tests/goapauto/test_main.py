@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict
+from typing import Any
 
 from goapauto.models.actions import Increment
 from goapauto.models.goal import Goal
@@ -12,7 +12,7 @@ from goapauto.utils.visualizer import SearchTreeVisualizer
 
 # 1. Mock Sensor
 class WoodSensor(Sensor):
-    def sense(self) -> Dict[str, Any]:
+    def sense(self) -> dict[str, Any]:
         return {"wood": 10}  # Perceived 10 wood in environment
 
 
