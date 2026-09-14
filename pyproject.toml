@@ -1,12 +1,12 @@
 [project]
 name = "goapauto"
-version = "0.3.0"
+version = "0.3.1"
 description = "A flexible Goal-Oriented Action Planning (GOAP) system for game AI and planning problems, featuring A* search, efficient state management, and modular design."
 readme = "README.md"
 authors = [
     { name = "IAmNo1Special", email = "ivmno1special@gmail.com" }
 ]
-requires-python = "==3.13.*"
+requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.12.5",
 ]
