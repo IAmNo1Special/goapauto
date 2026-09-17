@@ -60,6 +60,12 @@ from goapauto.models.goap_planner import (
     Schedule,
     ScheduleStep,
 )
+from goapauto.models.jev import (
+    JevGoalStrategy,
+    JevSensor,
+    TypeSafeClient,
+    TypeSafeError,
+)
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 from goapauto.utils.visualizer import SearchTreeVisualizer
@@ -81,6 +87,10 @@ __all__ = [
     "Sensor",
     "SensorManager",
     "GoalArbitrator",
+    "JevSensor",
+    "JevGoalStrategy",
+    "TypeSafeClient",
+    "TypeSafeError",
     "SearchTreeVisualizer",
     "Unset",
     "Delete",

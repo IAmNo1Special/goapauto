@@ -66,4 +66,5 @@ nav:
       - Actions: reference/actions.md
       - Planner: reference/planner.md
       - Perception (Sensors/Arbitrator): reference/perception.md
+      - TypeSafe Judgments: reference/jev.md
       - Visualizer: reference/visualizer.md
