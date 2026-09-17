@@ -13,8 +13,8 @@ judged from the evening, not hard-coded:
 
 Run offline (canned judgments stand in for Jev):
     python search_tree_jev.py --demo
-Run live:
-    TYPESAFE_API_KEY=... python search_tree_jev.py
+Run live (key from `.env` in the repo root, or `TYPESAFE_API_KEY` exported):
+    python search_tree_jev.py
 """
 
 import logging
@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from _env import load_dotenv  # noqa: E402
 
 from goapauto import (  # noqa: E402
     Goal,
@@ -35,6 +37,8 @@ from goapauto import (  # noqa: E402
     WorldState,
 )
 from goapauto.utils.visualizer import SearchTreeVisualizer  # noqa: E402
+
+load_dotenv()  # repo-root .env -> os.environ (exported vars win)
 
 logging.basicConfig(level=logging.WARNING)
 

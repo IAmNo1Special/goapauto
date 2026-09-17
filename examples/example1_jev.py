@@ -16,8 +16,8 @@ CV/OCR. Here it's simulated frames so you can see the loop react.
 
 Run offline (canned judgments stand in for Jev):
     python example1_jev.py --demo
-Run live:
-    TYPESAFE_API_KEY=... python example1_jev.py
+Run live (key from `.env` in the repo root, or `TYPESAFE_API_KEY` exported):
+    python example1_jev.py
 """
 
 import logging
@@ -26,6 +26,8 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from _env import load_dotenv  # noqa: E402
 
 from goapauto import (  # noqa: E402
     Goal,
@@ -37,6 +39,8 @@ from goapauto import (  # noqa: E402
     TypeSafeClient,
     WorldState,
 )
+
+load_dotenv()  # repo-root .env -> os.environ (exported vars win)
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
