@@ -23,7 +23,7 @@ What actually happened.
 
 ## Environment
 - **goapauto Version**: (e.g., 0.2.0)
-- **Python Version**: (e.g., 3.13.7)
+- **Python Version**: (e.g., 3.12.10)
 - **OS**: (e.g., Windows 11)
 
 ## Logs/Error Output

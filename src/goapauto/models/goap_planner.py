@@ -20,15 +20,25 @@ from goapauto.models.goal import Goal
 from goapauto.models.node import Node
 from goapauto.models.worldstate import WorldState
 
+
 # Set up console for Windows to support Unicode
-if os.name == "nt":
+def _configure_windows_console() -> None:
+    """Reconfigure stdout for UTF-8 output on Windows.
+
+    No-op on other platforms. Mutates the existing stream instead of
+    rebinding ``sys.stdout`` so pytest capture and other frameworks keep a
+    valid reference. Tolerates streams that cannot be reconfigured.
+    """
+    if os.name != "nt":
+        return
     try:
-        # Mutate the existing stream instead of rebinding sys.stdout so
-        # pytest capture and other frameworks keep a valid reference.
         sys.stdout.reconfigure(encoding="utf-8", errors="ignore")  # type: ignore[union-attr]
     except (AttributeError, io.UnsupportedOperation, ValueError):
         # stdout may be a StringIO, already closed, or not reconfigure-able.
         pass
+
+
+_configure_windows_console()
 
 
 def safe_print(*args, **kwargs):

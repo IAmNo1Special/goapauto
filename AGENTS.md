@@ -10,8 +10,8 @@ scheduling, and search-tree visualization. Built on Pydantic for validation.
 
 ## Build & Test
 
-- Python `>=3.12` is supported (`requires-python = ">=3.12"`); CI runs the
-    full suite on 3.12 and 3.13.
+- Python `3.12` is supported (`requires-python = ">=3.12"`); CI runs the
+    full suite on 3.12.
 
 - Use `uv` for all dependency and environment management (`uv sync --dev`).
 

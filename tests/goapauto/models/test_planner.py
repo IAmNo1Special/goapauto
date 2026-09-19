@@ -1,4 +1,3 @@
-import importlib
 import io
 import sys
 
@@ -192,32 +191,27 @@ class TestPlanner:
         safe_print("héllo wörld")
         assert calls["count"] == 2
 
-    def test_stdout_reconfigure_fallback(self, mocker):
-        """Test the module import guards against non-reconfigurable stdout.
-
-        This covers the exception branch of the Windows stdout setup by
-        simulating a stream whose reconfigure() is unsupported.
-        """
-        if sys.platform != "win32":
-            pytest.skip("Windows-only module setup")
-
-        class UnreconfigurableStream:
-            def reconfigure(self, **kwargs):
-                raise io.UnsupportedOperation("not supported")
-
-            def write(self, *args, **kwargs):
-                return 0
-
-        fake_stream = UnreconfigurableStream()
-        mocker.patch.object(sys, "stdout", fake_stream)
-
-        # Reloading runs the module-level setup; the except branch must no-op.
+    def test_windows_console_setup_reconfigures_stdout(self, mocker):
+        """The Windows console setup reconfigures stdout for UTF-8 output."""
         import goapauto.models.goap_planner as planner_mod
 
-        reloaded = importlib.reload(planner_mod)
-        assert reloaded is not None
-        # The original sys.stdout is restored after reload completes.
-        assert sys.stdout is fake_stream or hasattr(sys.stdout, "write")
+        mocker.patch.object(planner_mod.os, "name", "nt")
+        fake_stream = mocker.Mock()
+        mocker.patch.object(sys, "stdout", fake_stream)
+        planner_mod._configure_windows_console()
+        fake_stream.reconfigure.assert_called_once_with(
+            encoding="utf-8", errors="ignore"
+        )
+
+    def test_windows_console_setup_tolerates_bad_stdout(self, mocker):
+        """The Windows console setup never raises on a broken stdout stream."""
+        import goapauto.models.goap_planner as planner_mod
+
+        mocker.patch.object(planner_mod.os, "name", "nt")
+        fake_stream = mocker.Mock()
+        fake_stream.reconfigure.side_effect = io.UnsupportedOperation("not supported")
+        mocker.patch.object(sys, "stdout", fake_stream)
+        planner_mod._configure_windows_console()  # must not raise
 
     def test_schedule_to_list(self):
         """Test Schedule.to_list serialization."""
