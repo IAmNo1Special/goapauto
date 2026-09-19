@@ -36,8 +36,15 @@ from goapauto import (  # noqa: E402
     JevSensor,
     Planner,
     SensorManager,
-    TypeSafeClient,
     WorldState,
+)
+from typesafe_sdk import (  # noqa: E402
+    ChoiceAnswer,
+    Noul,
+    NoulAnswer,
+    SystemOneResponse,
+    TypeSafeClient,
+    Usage,
 )
 
 load_dotenv()  # repo-root .env -> os.environ (exported vars win)
@@ -74,16 +81,16 @@ FRAMES = [
 ]
 
 QUESTIONS = {
-    "is_open": {"type": "noul", "instructions": "Is the game client window open?"},
-    "game_started": {"type": "noul", "instructions": "Is the game past the launcher?"},
-    "logged_in": {"type": "noul", "instructions": "Is the player logged in?"},
-    "menu_open": {"type": "noul", "instructions": "Is the in-game menu open?"},
-    "tv_open": {"type": "noul", "instructions": "Is the TV interface open?"},
-    "mon_selected": {"type": "noul", "instructions": "Is a GuwopMon selected?"},
-    "stuck": {
-        "type": "noul",
-        "instructions": "Is the client stuck: loading spinner, error dialog, or failed login?",
-    },
+    "is_open": Noul(instructions="Is the game client window open?"),
+    "game_started": Noul(instructions="Is the game past the launcher?"),
+    "logged_in": Noul(instructions="Is the player logged in?"),
+    "menu_open": Noul(instructions="Is the in-game menu open?"),
+    "tv_open": Noul(instructions="Is the TV interface open?"),
+    "mon_selected": Noul(instructions="Is a GuwopMon selected?"),
+    "stuck": Noul(
+        instructions="Is the client stuck: loading spinner, error dialog, "
+        "or failed login?"
+    ),
 }
 
 # Canned judgments for --demo mode: same shapes Jev returns, so the rest of
@@ -120,24 +127,35 @@ DEMO_JUDGMENTS = [
 
 
 class DemoClient:
-    """Stands in for TypeSafeClient in --demo mode. Delete when live."""
+    """Offline stand-in returning SDK-shaped responses. Delete when live."""
 
-    def system_one(self, state: Any, questions: dict) -> dict:
+    def system_one(self, state: Any, questions: dict) -> SystemOneResponse:
         if "goal" in questions:  # goal-arbitration call
             world = state.get("world_state", {})
             if world.get("stuck", 0) > 0.5 or world.get("logged_in", 0) <= 0.5:
                 pick = "Recover session"
             else:
                 pick = "Grade a GuwopMon"
-            return {"answers": {"goal": {"type": "choice", "choice": pick}}}
+            return SystemOneResponse(
+                model="demo",
+                usage=Usage(input_tokens=0, output_tokens=0),
+                answers={
+                    "goal": ChoiceAnswer(
+                        choice=pick,
+                        confidence=1.0,
+                        probabilities={pick: 1.0},
+                    )
+                },
+            )
         screen = state.get("screen", "")
         idx = next((i for i, f in enumerate(FRAMES) if f["screen"] == screen), 0)
-        return {
-            "answers": {
-                name: {"type": "noul", "noul": DEMO_JUDGMENTS[idx][name]}
-                for name in questions
-            }
-        }
+        return SystemOneResponse(
+            model="demo",
+            usage=Usage(input_tokens=0, output_tokens=0),
+            answers={
+                name: NoulAnswer(noul=DEMO_JUDGMENTS[idx][name]) for name in questions
+            },
+        )
 
 
 def get_actions():

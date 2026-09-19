@@ -33,8 +33,15 @@ from goapauto import (  # noqa: E402
     JevSensor,
     Planner,
     SensorManager,
-    TypeSafeClient,
     WorldState,
+)
+from typesafe_sdk import (  # noqa: E402
+    ChoiceAnswer,
+    Noul,
+    NoulAnswer,
+    SystemOneResponse,
+    TypeSafeClient,
+    Usage,
 )
 from goapauto.utils.visualizer import SearchTreeVisualizer  # noqa: E402
 
@@ -66,29 +73,41 @@ EVENINGS = [
 ]
 
 QUESTIONS = {
-    "celebrating": {
-        "type": "noul",
-        "instructions": "Is tonight a special occasion worth spending money on?",
-    },
+    "celebrating": Noul(
+        instructions="Is tonight a special occasion worth spending money on?"
+    ),
 }
 
 
 class DemoClient:
-    """Stands in for TypeSafeClient in --demo mode. Delete when live."""
+    """Offline stand-in returning SDK-shaped responses. Delete when live."""
 
     def __init__(self, evening: dict) -> None:
         self._evening = evening
 
-    def system_one(self, state: Any, questions: dict) -> dict:
+    def system_one(self, state: Any, questions: dict) -> SystemOneResponse:
+        usage = Usage(input_tokens=0, output_tokens=0)
         if "goal" in questions:  # goal-arbitration call
             celebrating = state.get("world_state", {}).get("celebrating", 0)
             pick = "Full and Happy" if celebrating > 0.5 else "Just Get Full"
-            return {"answers": {"goal": {"type": "choice", "choice": pick}}}
-        return {
-            "answers": {
-                "celebrating": {"type": "noul", "noul": self._evening["celebrating"]}
-            }
-        }
+            return SystemOneResponse(
+                model="demo",
+                usage=usage,
+                answers={
+                    "goal": ChoiceAnswer(
+                        choice=pick,
+                        confidence=1.0,
+                        probabilities={pick: 1.0},
+                    )
+                },
+            )
+        return SystemOneResponse(
+            model="demo",
+            usage=usage,
+            answers={
+                "celebrating": NoulAnswer(noul=self._evening["celebrating"]),
+            },
+        )
 
 
 def get_actions():
@@ -183,6 +202,9 @@ def run_evening(evening: dict, demo: bool, idx: int) -> None:
     print(f"--- {evening['label']}: celebrating={state['celebrating']:.2f}")
 
     goal = arbitrator.select_goal(state)
+    if goal is None:
+        print("All goals satisfied.\n")
+        return
     print(f"Jev chose goal: {goal.name}")
 
     planner = Planner(actions_list=get_actions())

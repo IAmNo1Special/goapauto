@@ -31,8 +31,17 @@ from goapauto import (  # noqa: E402
     JevSensor,
     Planner,
     SensorManager,
-    TypeSafeClient,
     WorldState,
+)
+from typesafe_sdk import (  # noqa: E402
+    ChoiceAnswer,
+    Noul,
+    NoulAnswer,
+    Score,
+    ScoreAnswer,
+    SystemOneResponse,
+    TypeSafeClient,
+    Usage,
 )
 
 load_dotenv()  # repo-root .env -> os.environ (exported vars win)
@@ -65,35 +74,52 @@ MORNINGS = [
 ]
 
 QUESTIONS = {
-    "running_late": {
-        "type": "noul",
-        "instructions": "Is the person running late for their first commitment?",
-    },
-    "grogginess": {
-        "type": "score",
-        "instructions": "How groggy is the person?",
-        "criteria": ["fresh", "groggy", "zombie"],
-    },
+    "running_late": Noul(
+        instructions="Is the person running late for their first commitment?"
+    ),
+    "grogginess": Score(
+        instructions="How groggy is the person?",
+        criteria=["fresh", "groggy", "zombie"],
+    ),
 }
 
 
 class DemoClient:
-    """Stands in for TypeSafeClient in --demo mode. Delete when live."""
+    """Offline stand-in returning SDK-shaped responses. Delete when live."""
 
     def __init__(self, morning: dict) -> None:
         self._morning = morning
 
-    def system_one(self, state: Any, questions: dict) -> dict:
+    def system_one(self, state: Any, questions: dict) -> SystemOneResponse:
+        usage = Usage(input_tokens=0, output_tokens=0)
         if "goal" in questions:  # goal-arbitration call
             late = state.get("world_state", {}).get("running_late", 0)
             pick = "Rushed Exit" if late > 0.6 else "Full Routine"
-            return {"answers": {"goal": {"type": "choice", "choice": pick}}}
-        return {
-            "answers": {
-                "running_late": {"type": "noul", "noul": self._morning["running_late"]},
-                "grogginess": {"type": "score", "score": self._morning["grogginess"]},
-            }
-        }
+            return SystemOneResponse(
+                model="demo",
+                usage=usage,
+                answers={
+                    "goal": ChoiceAnswer(
+                        choice=pick,
+                        confidence=1.0,
+                        probabilities={pick: 1.0},
+                    )
+                },
+            )
+        grogginess = float(self._morning["grogginess"])
+        return SystemOneResponse(
+            model="demo",
+            usage=usage,
+            answers={
+                "running_late": NoulAnswer(noul=self._morning["running_late"]),
+                "grogginess": ScoreAnswer(
+                    score=grogginess,
+                    confidence=1.0,
+                    legend={0: "fresh", 1: "groggy", 2: "zombie"},
+                    probabilities={int(grogginess): 1.0},
+                ),
+            },
+        )
 
 
 def get_actions():
@@ -163,6 +189,9 @@ def run_morning(morning: dict, demo: bool) -> None:
     )
 
     goal = arbitrator.select_goal(state)
+    if goal is None:
+        print("All goals satisfied.\n")
+        return
     print(f"Jev chose goal: {goal.name}")
     result = planner.generate_plan(world_state=state, goal=goal)
     if result.plan:
