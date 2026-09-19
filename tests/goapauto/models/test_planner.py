@@ -213,6 +213,16 @@ class TestPlanner:
         mocker.patch.object(sys, "stdout", fake_stream)
         planner_mod._configure_windows_console()  # must not raise
 
+    def test_windows_console_setup_noop_off_windows(self, mocker):
+        """The Windows console setup is a no-op on other platforms."""
+        import goapauto.models.goap_planner as planner_mod
+
+        mocker.patch.object(planner_mod.os, "name", "posix")
+        fake_stream = mocker.Mock()
+        mocker.patch.object(sys, "stdout", fake_stream)
+        planner_mod._configure_windows_console()
+        fake_stream.reconfigure.assert_not_called()
+
     def test_schedule_to_list(self):
         """Test Schedule.to_list serialization."""
         schedule = Schedule(
