@@ -8,8 +8,10 @@ from typing import Any
 from typesafe_sdk import (
     Choice,
     ChoiceAnswer,
+    Noul,
     NoulAnswer,
     Questions,
+    Score,
     ScoreAnswer,
     SystemOneResponse,
     TypeSafeClient,
@@ -30,37 +32,40 @@ __all__ = [
 ]
 
 
-def _answers_of(response: SystemOneResponse | dict[str, Any]) -> Mapping[str, Any]:
-    """Return the answers mapping from an SDK response or a raw dict payload."""
-    if isinstance(response, dict):
-        try:
-            answers = response["answers"]
-        except KeyError as exc:
-            raise TypeSafeError("Missing 'answers' in TypeSafe response.") from exc
-        if not isinstance(answers, dict):
-            raise TypeSafeError("Invalid 'answers' in TypeSafe response.")
-        return answers
+def _answers_of(response: SystemOneResponse) -> Mapping[str, Any]:
+    """Return the answers mapping from an SDK response.
+
+    Raw dict responses are not supported; the SDK client's
+    ``SystemOneResponse`` must be passed through directly.
+    """
+    if not isinstance(response, SystemOneResponse):
+        raise TypeError(
+            f"Expected SystemOneResponse, got {type(response).__name__!r}; "
+            "raw dict responses are not supported."
+        )
     return response.answers
 
 
-def _value_of(answer: Any) -> Any:
-    """Extract the plain value from an SDK answer or a raw dict answer."""
+def _value_of(answer: NoulAnswer | ChoiceAnswer | ScoreAnswer) -> Any:
+    """Extract the plain value from an SDK answer.
+
+    Raw dict answers are not supported.
+    """
     if isinstance(answer, NoulAnswer):
         return answer.noul
     if isinstance(answer, ChoiceAnswer):
         return answer.choice
     if isinstance(answer, ScoreAnswer):
         return answer.score
-    if isinstance(answer, dict):
-        answer_type = answer.get("type")
-        if answer_type == "noul":
-            return answer["noul"]
-        if answer_type == "choice":
-            return answer["choice"]
-        if answer_type == "score":
-            return answer["score"]
-        raise TypeSafeError(f"Unknown answer type: {answer_type!r}")
-    raise TypeSafeError(f"Unknown answer type: {type(answer).__name__!r}")
+    raise TypeError(
+        f"Expected an SDK answer, got {type(answer).__name__!r}; "
+        "raw dict answers are not supported."
+    )
+
+
+# Valid question objects for JevSensor: the official typesafe-sdk classes.
+# (The SDK's *Model TypedDicts describe raw-dict shapes, which we reject.)
+_QUESTION_TYPES = (Noul, Choice, Score)
 
 
 class JevSensor(Sensor):
@@ -80,9 +85,9 @@ class JevSensor(Sensor):
     seconds have passed. On failure the last good judgments are reused so
     the agent loop keeps running.
 
-    Questions use the official ``typesafe-sdk`` types (``Noul``, ``Choice``,
-    ``Score``) or raw question dictionaries; the client is the SDK's
-    ``TypeSafeClient`` directly.
+    Questions must be official ``typesafe-sdk`` question objects (``Noul``,
+    ``Choice``, ``Score``); raw dictionaries are rejected with ``TypeError``.
+    The client is the SDK's ``TypeSafeClient`` directly.
     """
 
     def __init__(
@@ -96,6 +101,13 @@ class JevSensor(Sensor):
     ) -> None:
         if not questions:
             raise TypeSafeError("JevSensor needs at least one question.")
+        for name, question in questions.items():
+            if not isinstance(question, _QUESTION_TYPES):
+                raise TypeError(
+                    f"Question {name!r} must be a typesafe-sdk question "
+                    f"(Noul, Choice, Score), got {type(question).__name__!r}; "
+                    "raw dict questions are not supported."
+                )
         self._observe = observe
         self._questions = questions
         self._mapping = dict(mapping) if mapping else {n: n for n in questions}

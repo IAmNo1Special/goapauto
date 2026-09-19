@@ -34,14 +34,14 @@ dev = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 mypy_path = "src"
 plugins = ["pydantic.mypy"]
 ignore_missing_imports = true
