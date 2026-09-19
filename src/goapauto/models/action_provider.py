@@ -30,7 +30,7 @@ class ActionProvider(Protocol):
         ...
 
 
-class StaticActionProvider:
+class StaticActionProvider(ActionProvider):
     """An action provider that wraps a static collection of actions."""
 
     def __init__(self, actions: Actions) -> None:
