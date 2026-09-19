@@ -278,8 +278,8 @@ class TestPlanner:
         with pytest.raises(ValueError, match="Unknown event hook"):
             planner.register_hook("bogus_event", lambda: None)
 
-    def test_hook_error_is_swallowed(self, mocker):
-        """Test hook exceptions are logged but don't propagate."""
+    def test_hook_error_propagates(self, mocker):
+        """Test hook exceptions propagate instead of being swallowed."""
 
         def bad_callback(**kwargs):
             raise RuntimeError("hook boom")
@@ -289,8 +289,8 @@ class TestPlanner:
 
         state = WorldState(a=1)
         goal = Goal(target_state={"b": 1})
-        result = planner.generate_plan(state, goal)
-        assert result.plan == ["s"]
+        with pytest.raises(RuntimeError, match="hook boom"):
+            planner.generate_plan(state, goal)
 
     def test_display_statistics_no_stats(self):
         """Test _display_statistics is a no-op without stats."""
@@ -299,11 +299,10 @@ class TestPlanner:
         planner._display_statistics()  # Should not raise
 
     def test_generate_plan_invalid_input(self):
-        """Test generate_plan returns error for invalid input types."""
+        """Test generate_plan raises for invalid input types."""
         planner = Planner(actions_list=[])
-        result = planner.generate_plan("not-a-state", {"a": 1})
-        assert result.plan is None
-        assert "Error during planning" in result.message
+        with pytest.raises(TypeError, match="world_state must be a dict"):
+            planner.generate_plan("not-a-state", {"a": 1})
 
     def test_generate_plan_dict_inputs(self):
         """Test generate_plan accepts dict inputs."""
@@ -330,16 +329,16 @@ class TestPlanner:
         with pytest.raises(ValueError, match="max_depth must be positive"):
             planner._validate_and_convert(WorldState(), Goal(target_state={"a": 1}), 0)
 
-    def test_provider_error_is_logged(self, mocker, caplog):
-        """Test provider exceptions are logged and skipped."""
+    def test_provider_error_propagates(self, mocker, caplog):
+        """Test provider exceptions propagate instead of being skipped."""
 
         class BadProvider:
             def provide_actions(self, state, goal=None):
                 raise RuntimeError("provider boom")
 
         planner = Planner(providers=[BadProvider()])
-        planner.generate_plan(WorldState(a=1), {"b": 1})
-        assert "Error providing actions" in caplog.text
+        with pytest.raises(RuntimeError, match="provider boom"):
+            planner.generate_plan(WorldState(a=1), {"b": 1})
 
     def test_plan_with_durations_and_schedule(self):
         """Test plan reconstruction with timed actions produces a schedule."""
@@ -406,11 +405,10 @@ class TestPlanner:
         assert "complete the plan" in result.message
 
     def test_continue_plan_error(self):
-        """Test continue_plan error path."""
+        """Test continue_plan error path raises."""
         planner = Planner(actions_list=[])
-        result = planner.continue_plan("bad", {"a": 1}, [])
-        assert result.plan is None
-        assert "Error during continued planning" in result.message
+        with pytest.raises(TypeError, match="world_state must be a dict"):
+            planner.continue_plan("bad", {"a": 1}, [])
 
     def test_continue_plan_no_plan_found(self):
         """Test continue_plan when no plan is reachable."""
@@ -491,11 +489,10 @@ class TestPlanner:
 
     @pytest.mark.asyncio
     async def test_async_generate_plan_error(self):
-        """Test async planning error path."""
+        """Test async planning error path raises."""
         planner = Planner(actions_list=[])
-        result = await planner.async_generate_plan("bad", {"a": 1})
-        assert result.plan is None
-        assert "Error during planning" in result.message
+        with pytest.raises(TypeError, match="world_state must be a dict"):
+            await planner.async_generate_plan("bad", {"a": 1})
 
     @pytest.mark.asyncio
     async def test_async_plan_with_durations(self):
@@ -833,3 +830,33 @@ class TestPlannerBugfixes:
             WorldState(x=0), {"x": 1}, executed_actions=["step1", "step2", "step1"]
         )
         assert result.plan == []
+
+    def test_default_search_is_optimal_with_sub_unit_costs(self):
+        """Dijkstra default: the old counting heuristic overestimates here
+        (h=1 for one unsatisfied condition, true remaining cost 0.6) and
+        would return the suboptimal shortcut."""
+        planner = Planner(
+            actions_list=[
+                ("cheap1", {}, {"a": 1}, 0.3),
+                ("cheap2", {"a": 1}, {"b": 1}, 0.3),
+                ("pricey", {}, {"b": 1}, 0.7),
+            ],
+            verbose=False,
+        )
+        result = planner.generate_plan(WorldState(), {"b": 1})
+        assert result.plan == ["cheap1", "cheap2"]
+
+    def test_repeated_searches_are_deterministic(self):
+        """Equal-cost heap ties expand in insertion order: same plan every run."""
+        planner = Planner(
+            actions_list=[
+                ("left", {}, {"done": True}, 1.0),
+                ("right", {}, {"done": True}, 1.0),
+            ],
+            verbose=False,
+        )
+        plans = [
+            planner.generate_plan(WorldState(), {"done": True}).plan for _ in range(5)
+        ]
+        assert all(p == plans[0] for p in plans)
+        assert plans[0] == ["left"]

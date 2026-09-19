@@ -17,9 +17,8 @@ from goapauto.models.goal_arbitrator import GoalArbitrator
 from goapauto.models.jev import (
     JevGoalStrategy,
     JevSensor,
-    _answers_of,
     _json_safe,
-    _value_of,
+    _require_response,
 )
 from goapauto.models.sensors import SensorManager
 from goapauto.models.worldstate import WorldState
@@ -79,40 +78,50 @@ def goal_response(choice):
 
 
 class TestHelpers:
-    def test_answers_of_sdk(self):
-        assert _answers_of(sdk_response())["danger"].noul == 0.87
+    def test_require_response_passthrough(self):
+        response = sdk_response()
+        assert _require_response(response) is response
 
-    def test_answers_of_rejects_dict(self):
+    def test_require_response_rejects_dict(self):
         with pytest.raises(TypeError, match="SystemOneResponse"):
-            _answers_of({"answers": {"danger": {"type": "noul", "noul": 0.87}}})
+            _require_response({"answers": {}})
 
-    def test_answers_of_rejects_non_response(self):
+    def test_require_response_rejects_non_response(self):
         with pytest.raises(TypeError, match="SystemOneResponse"):
-            _answers_of(object())
+            _require_response(object())
 
-    def test_value_of_sdk_noul(self):
-        assert _value_of(NoulAnswer(noul=0.5)) == 0.5
-
-    def test_value_of_sdk_choice(self):
-        answer = ChoiceAnswer(choice="a", confidence=1.0, probabilities={"a": 1.0})
-        assert _value_of(answer) == "a"
-
-    def test_value_of_sdk_score(self):
-        answer = ScoreAnswer(
-            score=1.0,
-            confidence=1.0,
-            legend={0: "low", 1: "high"},
-            probabilities={0: 0.0, 1: 1.0},
+    def test_extract_sdk_answers(self, mocker):
+        sensor = JevSensor(
+            observe=lambda: {}, questions=sdk_questions(), client=mocker.Mock()
         )
-        assert _value_of(answer) == 1.0
+        assert sensor._extract(sdk_response()) == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
 
-    def test_value_of_rejects_dict(self):
-        with pytest.raises(TypeError, match="SDK answer"):
-            _value_of({"type": "noul", "noul": 0.3})
+    def test_extract_rejects_dict_response(self, mocker):
+        sensor = JevSensor(
+            observe=lambda: {}, questions=sdk_questions(), client=mocker.Mock()
+        )
+        with pytest.raises(TypeError, match="SystemOneResponse"):
+            sensor._extract({"answers": {}})
 
-    def test_value_of_rejects_other(self):
-        with pytest.raises(TypeError, match="SDK answer"):
-            _value_of(object())
+    def test_extract_wrong_answer_type_missing(self, mocker):
+        sensor = JevSensor(
+            observe=lambda: {}, questions=sdk_questions(), client=mocker.Mock()
+        )
+        response = SystemOneResponse.model_construct(
+            model="jev-latest",
+            usage=usage(),
+            answers={
+                "danger": ChoiceAnswer(
+                    choice="x", confidence=1.0, probabilities={"x": 1.0}
+                )
+            },
+        )
+        with pytest.raises(TypeSafeError, match="Missing answer"):
+            sensor._extract(response)
 
     def test_json_safe_primitives(self):
         assert _json_safe(None) is None
@@ -242,14 +251,27 @@ class TestJevSensor:
         with pytest.raises(TypeError, match="SystemOneResponse"):
             sensor.sense()
 
-    def test_non_sdk_answer_rejected(self, mocker):
+    def test_garbled_answer_degrades_gracefully(self, mocker, caplog):
         api = mocker.Mock()
-        api.system_one.return_value = SystemOneResponse.model_construct(
-            model="jev-latest", usage=usage(), answers={"danger": object()}
-        )
+        api.system_one.side_effect = [
+            sdk_response(),
+            SystemOneResponse.model_construct(
+                model="jev-latest", usage=usage(), answers={"danger": object()}
+            ),
+        ]
         sensor = JevSensor(observe=lambda: {}, questions=sdk_questions(), client=api)
-        with pytest.raises(TypeError, match="SDK answer"):
-            sensor.sense()
+        assert sensor.sense() == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
+        # Garbled answers on the next re-judge reuse the fresh cache.
+        assert sensor.sense() == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
+        assert "reusing last judgments" in caplog.text
 
     def test_missing_answer(self, mocker, caplog):
         api = mocker.Mock()
@@ -260,12 +282,44 @@ class TestJevSensor:
         assert sensor.sense() == {}
         assert "Missing answer" in caplog.text
 
+    def test_stale_cache_returns_empty_after_max_stale(self, mocker, caplog):
+        api = mocker.Mock()
+        api.system_one.side_effect = [
+            sdk_response(),
+            TypeSafeError("down"),
+        ]
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            max_stale=30.0,
+        )
+        assert sensor.sense() == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
+        # Age the last success past max_stale, then fail again: the cache is
+        # dead, so sense() returns no updates instead of ancient judgments.
+        sensor._last_success -= 60.0
+        assert sensor.sense() == {}
+        assert "returning no updates" in caplog.text
+
+    def test_negative_max_stale_rejected(self, mocker):
+        with pytest.raises(ValueError, match="max_stale"):
+            JevSensor(
+                observe=lambda: {},
+                questions=sdk_questions(),
+                client=mocker.Mock(),
+                max_stale=-1.0,
+            )
+
     def test_api_error_first_call_returns_empty(self, mocker, caplog):
         api = mocker.Mock()
         api.system_one.side_effect = TypeSafeError("down")
         sensor = JevSensor(observe=lambda: {}, questions=sdk_questions(), client=api)
         assert sensor.sense() == {}
-        assert "reusing last judgments" in caplog.text
+        assert "returning no updates" in caplog.text
 
     def test_api_error_reuses_cached(self, mocker, caplog):
         api = mocker.Mock()

@@ -306,6 +306,10 @@ class Action:
     def is_applicable(self, state: Any) -> bool:
         """Check if this action can be applied to the given state.
 
+        A state missing a precondition key is not applicable. Errors raised
+        by precondition predicates propagate to the caller -- a broken
+        predicate fails loudly instead of silently disabling the action.
+
         Args:
             state: The current world state to check against
 
@@ -313,38 +317,32 @@ class Action:
             bool: True if all preconditions are met, False otherwise
         """
         logger.debug("Checking applicability of action: %s", self.name)
-        try:
-            for attr, expected in self.preconditions.items():
-                if not hasattr(state, attr):
-                    logger.debug("State missing required attribute: %s", attr)
-                    return False
+        for attr, expected in self.preconditions.items():
+            if not hasattr(state, attr):
+                logger.debug("State missing required attribute: %s", attr)
+                return False
 
-                current_value = getattr(state, attr)
+            current_value = getattr(state, attr)
 
-                # Handle Predicate objects or other callables
-                if callable(expected):
-                    if not expected(current_value):
-                        logger.debug(
-                            "Precondition failed for %s: %s(%s) is False",
-                            attr,
-                            expected,
-                            current_value,
-                        )
-                        return False
-                # Handle direct value comparison
-                elif current_value != expected:
+            # Handle Predicate objects or other callables
+            if callable(expected):
+                if not expected(current_value):
                     logger.debug(
-                        "Precondition not met: %s != %s",
-                        current_value,
+                        "Precondition failed for %s: %s(%s) is False",
+                        attr,
                         expected,
+                        current_value,
                     )
                     return False
-            return True
-        except Exception as e:
-            logger.error(
-                "Error checking action applicability: %s", str(e), exc_info=True
-            )
-            return False
+            # Handle direct value comparison
+            elif current_value != expected:
+                logger.debug(
+                    "Precondition not met: %s != %s",
+                    current_value,
+                    expected,
+                )
+                return False
+        return True
 
     def apply(self, state: Any) -> Any:
         """Apply this action to the current state and return a new state.

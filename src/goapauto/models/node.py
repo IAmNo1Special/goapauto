@@ -45,7 +45,11 @@ class Node:
             parent: The parent node (None for root)
             goal: The goal being pursued (Goal object or dict)
             action: The action that led to this node (None for root)
-            heuristic_fn: Optional custom heuristic function
+            heuristic_fn: Optional custom heuristic function. When omitted the
+                search runs Dijkstra's algorithm (h=0): slower than a guided
+                search but guaranteed optimal. ``Node.heuristic`` (count of
+                unsatisfied conditions) is available as a faster opt-in, but it
+                is NOT admissible in general -- see its docstring.
         """
         if not isinstance(state, WorldState):
             raise TypeError(f"state must be a WorldState, got {type(state)}")
@@ -59,11 +63,14 @@ class Node:
         # Calculate g-score (cost from start to current node)
         self.g_score = self._calculate_g_score(parent, action)
 
-        # Calculate h-score (heuristic estimate to goal)
+        # Calculate h-score (heuristic estimate to goal). The default is
+        # Dijkstra (h=0): always admissible, so the first plan found is
+        # optimal. A custom heuristic_fn may guide the search faster but
+        # must be admissible itself to keep that guarantee.
         if heuristic_fn:
             self.h_score = heuristic_fn(state, goal)
         else:
-            self.h_score = self.heuristic(state, goal)
+            self.h_score = 0.0
 
         # Calculate f-score (total score for A*)
         self.f_score = self.g_score + self.h_score
@@ -101,6 +108,15 @@ class Node:
         The heuristic estimates the cost from the current state to the goal.
         This implementation counts the number of unsatisfied goal conditions.
 
+        Note: this heuristic is NOT admissible in general. It overestimates
+        whenever an action costs less than 1 or a single action satisfies
+        more than one condition, which makes A* return suboptimal plans.
+        It is kept as an opt-in (``heuristic_fn=Node.heuristic``) for cases
+        where speed matters more than optimality; the default search is
+        Dijkstra (h=0) and always optimal.
+
+        A key missing from the state never satisfies a condition.
+
         Args:
             state: The current world state
             goal: Either a Goal object or a dictionary of goal conditions
@@ -123,7 +139,7 @@ class Node:
                 sum(
                     1
                     for key, value in goal.items()
-                    if getattr(state, key, None) != value
+                    if not hasattr(state, key) or getattr(state, key) != value
                 )
             )
 
@@ -136,6 +152,9 @@ class Node:
         This heuristic computes a more informed distance for numeric goal values
         by using the absolute difference between current and target values,
         rather than just counting unsatisfied conditions.
+
+        Like :meth:`heuristic`, it is not admissible in general -- opt-in only.
+        A key missing from the state never satisfies a condition.
 
         Args:
             state: The current world state
@@ -157,7 +176,17 @@ class Node:
             raise TypeError(f"goal must be a Goal or dict, got {type(goal)}")
 
         for attr, desired in target_state.items():
-            current = getattr(state, attr, None)
+            if not hasattr(state, attr):
+                # Missing keys never satisfy a condition.
+                if callable(desired):
+                    total_distance += 1.0
+                elif isinstance(desired, (int, float)):
+                    total_distance += abs(desired) + 1.0
+                else:
+                    total_distance += 1.0
+                continue
+
+            current = getattr(state, attr)
 
             # Handle callable predicates (GreaterThan, LessThan, Range, etc.)
             if callable(desired):

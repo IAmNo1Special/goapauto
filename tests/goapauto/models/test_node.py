@@ -26,6 +26,36 @@ class TestNode:
         assert node.h_score == 42.0
         assert node.f_score == node.g_score + node.h_score
 
+    def test_default_heuristic_is_dijkstra(self):
+        """Without heuristic_fn the node defaults to h=0 (always admissible)."""
+        node = Node(
+            state=WorldState(a=0), parent=None, goal=Goal(target_state={"a": 5})
+        )
+        assert node.h_score == 0.0
+        assert node.f_score == node.g_score
+
+    def test_heuristic_rejects_non_worldstate(self):
+        """Node.heuristic raises TypeError for a non-WorldState state."""
+        with pytest.raises(TypeError, match="state must be a WorldState"):
+            Node.heuristic({"a": 1}, {"a": 1})
+
+    def test_heuristic_with_goal_object(self):
+        """Node.heuristic accepts a Goal object via its unsatisfied conditions."""
+        goal = Goal(target_state={"a": 1, "b": 2})
+        assert Node.heuristic(WorldState(a=0), goal) == 2.0
+        assert Node.heuristic(WorldState(a=1, b=2), goal) == 0.0
+
+    def test_numeric_heuristic_missing_keys(self):
+        """Missing keys in numeric_heuristic count by desired-value shape."""
+        state = WorldState()
+
+        # Missing numeric key: distance from an assumed 0 plus one.
+        assert Node.numeric_heuristic(state, {"hp": 50}) == 51.0
+        # Missing callable key: counts as one unmet condition.
+        assert Node.numeric_heuristic(state, {"ok": lambda v: True}) == 1.0
+        # Missing non-numeric key: counts as one unmet condition.
+        assert Node.numeric_heuristic(state, {"mode": "stealth"}) == 1.0
+
     def test_g_score_with_parent_and_action(self):
         """Test g_score accumulates with parent and action cost."""
         state = WorldState(a=0)

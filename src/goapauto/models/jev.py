@@ -2,17 +2,14 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Any
 
 from typesafe_sdk import (
     Choice,
-    ChoiceAnswer,
     Noul,
-    NoulAnswer,
     Questions,
     Score,
-    ScoreAnswer,
     SystemOneResponse,
     TypeSafeClient,
     TypeSafeError,
@@ -32,40 +29,24 @@ __all__ = [
 ]
 
 
-def _answers_of(response: SystemOneResponse) -> Mapping[str, Any]:
-    """Return the answers mapping from an SDK response.
+# Valid question objects for JevSensor: the official typesafe-sdk classes.
+# (The SDK's *Model TypedDicts describe raw-dict shapes, which we reject.)
+_QUESTION_TYPES = (Noul, Choice, Score)
 
-    Raw dict responses are not supported; the SDK client's
-    ``SystemOneResponse`` must be passed through directly.
+
+def _require_response(response: object) -> SystemOneResponse:
+    """Return the SDK response, rejecting anything else.
+
+    The SDK's ``system_one`` always returns a validated ``SystemOneResponse``;
+    anything else means the client was miswired. Raw dict responses are not
+    supported.
     """
     if not isinstance(response, SystemOneResponse):
         raise TypeError(
             f"Expected SystemOneResponse, got {type(response).__name__!r}; "
             "raw dict responses are not supported."
         )
-    return response.answers
-
-
-def _value_of(answer: NoulAnswer | ChoiceAnswer | ScoreAnswer) -> Any:
-    """Extract the plain value from an SDK answer.
-
-    Raw dict answers are not supported.
-    """
-    if isinstance(answer, NoulAnswer):
-        return answer.noul
-    if isinstance(answer, ChoiceAnswer):
-        return answer.choice
-    if isinstance(answer, ScoreAnswer):
-        return answer.score
-    raise TypeError(
-        f"Expected an SDK answer, got {type(answer).__name__!r}; "
-        "raw dict answers are not supported."
-    )
-
-
-# Valid question objects for JevSensor: the official typesafe-sdk classes.
-# (The SDK's *Model TypedDicts describe raw-dict shapes, which we reject.)
-_QUESTION_TYPES = (Noul, Choice, Score)
+    return response
 
 
 class JevSensor(Sensor):
@@ -83,11 +64,16 @@ class JevSensor(Sensor):
     uses the model. Judgments are cached: the API is re-queried when the
     observation changes (if ``resense_on_change``) or once ``min_interval``
     seconds have passed. On failure the last good judgments are reused so
-    the agent loop keeps running.
+    the agent loop keeps running -- but only for ``max_stale`` seconds;
+    after that the cache is considered dead and ``sense()`` returns no
+    updates (degrading visibly instead of acting on ancient judgments).
 
     Questions must be official ``typesafe-sdk`` question objects (``Noul``,
     ``Choice``, ``Score``); raw dictionaries are rejected with ``TypeError``.
     The client is the SDK's ``TypeSafeClient`` directly.
+
+    Thread safety: not thread-safe. Use one JevSensor per thread; do not
+    share it across threads without external synchronization.
     """
 
     def __init__(
@@ -98,9 +84,13 @@ class JevSensor(Sensor):
         client: TypeSafeClient | None = None,
         min_interval: float = 0.0,
         resense_on_change: bool = True,
+        max_stale: float = 30.0,
     ) -> None:
         if not questions:
             raise TypeSafeError("JevSensor needs at least one question.")
+        if max_stale < 0:
+            raise ValueError("max_stale must be non-negative.")
+        validated: dict[str, Noul | Choice | Score] = {}
         for name, question in questions.items():
             if not isinstance(question, _QUESTION_TYPES):
                 raise TypeError(
@@ -108,8 +98,9 @@ class JevSensor(Sensor):
                     f"(Noul, Choice, Score), got {type(question).__name__!r}; "
                     "raw dict questions are not supported."
                 )
+            validated[name] = question
         self._observe = observe
-        self._questions = questions
+        self._questions = validated
         self._mapping = dict(mapping) if mapping else {n: n for n in questions}
         unknown = set(self._mapping) - set(questions)
         if unknown:
@@ -122,9 +113,11 @@ class JevSensor(Sensor):
         self._owns_client = client is None
         self._min_interval = min_interval
         self._resense_on_change = resense_on_change
+        self._max_stale = max_stale
         self._cached: dict[str, Any] = {}
         self._last_observation: dict[str, Any] | None = None
         self._last_call: float = 0.0
+        self._last_success: float = 0.0
 
     def close(self) -> None:
         """Close the TypeSafe client if this sensor created it.
@@ -136,18 +129,34 @@ class JevSensor(Sensor):
             self._client.close()
 
     def sense(self) -> dict[str, Any]:
-        """Return judgment-derived state updates, re-querying only when due."""
+        """Return judgment-derived state updates, re-querying only when due.
+
+        When a re-judge fails, the last good judgments are reused only while
+        they are younger than ``max_stale`` seconds; older than that, the
+        cache is dead and an empty dict is returned so the agent degrades
+        visibly instead of acting on stale perception.
+        """
         observation = self._observe()
         if self._should_resense(observation):
             try:
                 response = self._client.system_one(observation, self._questions)
-                self._cached = self._extract(_answers_of(response))
+                self._cached = self._extract(response)
                 self._last_observation = observation
                 self._last_call = time.monotonic()
+                self._last_success = self._last_call
             except TypeSafeError:
-                logger.warning(
-                    "JevSensor failed; reusing last judgments", exc_info=True
-                )
+                if time.monotonic() - self._last_success <= self._max_stale:
+                    logger.warning(
+                        "JevSensor failed; reusing last judgments", exc_info=True
+                    )
+                else:
+                    logger.error(
+                        "JevSensor failed and cached judgments are older than "
+                        "max_stale (%.1fs); returning no updates",
+                        self._max_stale,
+                        exc_info=True,
+                    )
+                    return {}
         return dict(self._cached)
 
     def _should_resense(self, observation: dict[str, Any]) -> bool:
@@ -157,16 +166,30 @@ class JevSensor(Sensor):
             return True
         return (time.monotonic() - self._last_call) >= self._min_interval
 
-    def _extract(self, answers: Mapping[str, Any]) -> dict[str, Any]:
+    def _extract(self, response: SystemOneResponse) -> dict[str, Any]:
+        """Map the SDK's typed answers onto world-state keys.
+
+        Reads through the SDK's own typed accessors (``nouls()``,
+        ``choices()``, ``scores()``); the question objects fixed at
+        construction decide which accessor each answer comes from.
+        """
+        response = _require_response(response)
         updates: dict[str, Any] = {}
         for question_name, state_key in self._mapping.items():
+            question = self._questions[question_name]
+            value: Any
             try:
-                answer = answers[question_name]
+                if isinstance(question, Noul):
+                    value = response.nouls[question_name].noul
+                elif isinstance(question, Choice):
+                    value = response.choices[question_name].choice
+                else:  # Score: the only remaining validated question type.
+                    value = response.scores[question_name].score
             except KeyError as exc:
                 raise TypeSafeError(
                     f"Missing answer for question {question_name!r}"
                 ) from exc
-            updates[state_key] = _value_of(answer)
+            updates[state_key] = value
         return updates
 
 
@@ -193,6 +216,9 @@ class JevGoalStrategy:
 
     Goal names must be unique. If the model is unreachable or names an
     unknown goal, the first goal is returned so the agent loop keeps running.
+
+    Thread safety: not thread-safe. Use one JevGoalStrategy per thread; do
+    not share it across threads without external synchronization.
     """
 
     def __init__(
@@ -236,27 +262,30 @@ class JevGoalStrategy:
             for label, goal in labeled
         }
         try:
-            response = self._client.system_one(
-                {
-                    "world_state": state.to_dict(),
-                    "goals": [
-                        {"name": label, "target_state": _json_safe(goal.target_state)}
-                        for label, goal in labeled
-                    ],
-                },
-                {
-                    "goal": Choice(
-                        instructions=self._instructions,
-                        criteria=criteria,
-                    )
-                },
+            response = _require_response(
+                self._client.system_one(
+                    {
+                        "world_state": state.to_dict(),
+                        "goals": [
+                            {
+                                "name": label,
+                                "target_state": _json_safe(goal.target_state),
+                            }
+                            for label, goal in labeled
+                        ],
+                    },
+                    {
+                        "goal": Choice(
+                            instructions=self._instructions,
+                            criteria=criteria,
+                        )
+                    },
+                )
             )
-            answers = _answers_of(response)
             try:
-                goal_answer = answers["goal"]
+                pick = response.choices["goal"].choice
             except KeyError as exc:
                 raise TypeSafeError("Missing answer for question 'goal'") from exc
-            pick = _value_of(goal_answer)
         except TypeSafeError:
             logger.warning(
                 "JevGoalStrategy failed; falling back to first goal", exc_info=True

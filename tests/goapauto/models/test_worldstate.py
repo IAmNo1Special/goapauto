@@ -51,12 +51,30 @@ class TestWorldState:
 
     def test_copy_semantics(self):
         """Test deep copying of state."""
-        ws = WorldState(nested_list=[1, 2])
+        ws = WorldState(inner=WorldState(vals=(1, 2)))
         ws_copy = ws.copy(deep=True)
 
-        ws_copy.nested_list.append(3)
-        assert ws.nested_list == [1, 2]
-        assert ws_copy.nested_list == [1, 2, 3]
+        assert ws_copy.inner is not ws.inner
+        ws_copy.inner.vals = (1, 2, 3)
+        assert ws.inner.vals == (1, 2)
+        assert ws_copy.inner.vals == (1, 2, 3)
+
+    def test_unhashable_values_rejected_at_write(self):
+        """Unhashable values fail at the write with a clear error, not later
+        inside the planner's hash()."""
+        with pytest.raises(TypeError, match="must be hashable"):
+            WorldState(bag=[1, 2])
+
+        ws = WorldState(a=1)
+        with pytest.raises(TypeError, match="must be hashable"):
+            ws.b = [1, 2]
+        with pytest.raises(TypeError, match="must be hashable"):
+            ws["c"] = {"x": 1}
+        with pytest.raises(TypeError, match="must be hashable"):
+            ws.update({"d": [3]})
+
+        # The state is unchanged by the rejected writes.
+        assert ws.get_state() == {"a": 1}
 
     def test_hashing_and_equality(self):
         """Test equality and hashability."""

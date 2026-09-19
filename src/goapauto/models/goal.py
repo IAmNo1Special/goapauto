@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import logging
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-logger = logging.getLogger(__name__)
 T = TypeVar("T", bound="Goal")
 
 
@@ -41,42 +39,46 @@ class Goal(BaseModel):
     def is_satisfied(self, world_state: Any) -> bool:
         """Check if this goal is satisfied by the given world state.
 
+        A key missing from the world state never satisfies a condition --
+        missing keys fail goal checks exactly like they fail action
+        preconditions. Predicate errors propagate to the caller.
+
         Args:
             world_state: The world state to check against.
 
         Returns:
             bool: True if all conditions in target_state are satisfied.
         """
-        try:
-            for attr, desired in self.target_state.items():
-                current = getattr(world_state, attr, None)
-                if callable(desired):
-                    if not desired(current):
-                        return False
-                elif current != desired:
+        for attr, desired in self.target_state.items():
+            if not hasattr(world_state, attr):
+                return False
+            current = getattr(world_state, attr)
+            if callable(desired):
+                if not desired(current):
                     return False
-            return True
-        except AttributeError as e:
-            logger.error("Error checking goal satisfaction: %s", str(e))
-            return False
+            elif current != desired:
+                return False
+        return True
 
     def get_unsatisfied_conditions(
         self, world_state: Any
     ) -> dict[str, tuple[Any, Any]]:
-        """Get the conditions that are not satisfied in the current world state."""
-        try:
-            unsatisfied = {}
-            for attr, desired in self.target_state.items():
-                current = getattr(world_state, attr, None)
-                if callable(desired):
-                    if not desired(current):
-                        unsatisfied[attr] = (current, desired)
-                elif current != desired:
+        """Get the conditions that are not satisfied in the current world state.
+
+        A key missing from the world state is always reported as unsatisfied.
+        """
+        unsatisfied = {}
+        for attr, desired in self.target_state.items():
+            if not hasattr(world_state, attr):
+                unsatisfied[attr] = (None, desired)
+                continue
+            current = getattr(world_state, attr)
+            if callable(desired):
+                if not desired(current):
                     unsatisfied[attr] = (current, desired)
-            return unsatisfied
-        except Exception as e:
-            logger.error("Error getting unsatisfied conditions: %s", str(e))
-            raise
+            elif current != desired:
+                unsatisfied[attr] = (current, desired)
+        return unsatisfied
 
     def __hash__(self) -> int:
         """Compute a hash value for this goal."""

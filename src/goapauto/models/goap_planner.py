@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import heapq
 import io
+import itertools
 import logging
 import os
 import sys
@@ -116,6 +117,18 @@ class Planner:
     This class implements a planning system that finds a sequence of actions to
     achieve a goal state from an initial state, using A* search with a heuristic.
 
+    The default search is Dijkstra's algorithm (h=0): always admissible, so
+    the first plan found is optimal. Pass ``heuristic_fn`` for guided (but
+    only optimal if admissible) search.
+
+    Planning errors propagate to the caller -- invalid inputs, broken
+    predicates, failing providers, and broken hooks raise instead of
+    returning an empty result. A ``PlanResult`` with ``plan=None`` means
+    "no plan found", not "an error occurred".
+
+    Thread safety: not thread-safe. Use one Planner per thread; do not share
+    it across threads without external synchronization.
+
     Attributes:
         providers: List of ActionProvider instances
         max_iterations: Maximum number of iterations before giving up
@@ -140,7 +153,10 @@ class Planner:
             actions_list: Optional list of action tuples (name, preconditions, effects, cost)
             providers: Optional list of ActionProvider instances
             max_iterations: Maximum number of iterations for the search algorithm
-            heuristic_fn: Optional default heuristic function
+            heuristic_fn: Optional default heuristic function. When omitted the
+                search runs Dijkstra's algorithm (h=0), which is always
+                optimal; a custom function must be admissible to keep that
+                guarantee.
             verbose: Whether to print progress messages to stdout (default True)
             logger: Optional custom logger instance (uses module logger if None)
             cost_weights: Optional weights for multi-dimensional costs.
@@ -460,12 +476,13 @@ class Planner:
         return current_state
 
     def _trigger_hook(self, event: str, *args, **kwargs) -> None:
-        """Trigger all registered callbacks for an event."""
+        """Trigger all registered callbacks for an event.
+
+        Hook errors propagate to the caller -- a broken hook fails loudly
+        instead of being silently swallowed.
+        """
         for callback in self.hooks.get(event, []):
-            try:
-                callback(*args, **kwargs)
-            except Exception as e:
-                logger.error("Error in hook %s: %s", event, e)
+            callback(*args, **kwargs)
 
     def _display_statistics(self) -> None:
         """Display planning statistics in a consistent format."""
@@ -496,10 +513,18 @@ class Planner:
             world_state: The current state of the world
             goal: The goal to achieve
             max_depth: Optional maximum depth for the search
-            heuristic_fn: Optional custom heuristic function for this plan
+            heuristic_fn: Optional custom heuristic function for this plan.
+                When omitted the search runs Dijkstra's algorithm (h=0).
 
         Returns:
-            A tuple of (plan, message)
+            PlanResult. ``plan`` is None when no plan was found.
+
+        Raises:
+            TypeError: If the inputs have invalid types.
+            ValueError: If the inputs are invalid.
+            Exception: Any error from predicates, providers, or hooks
+                propagates -- planning fails loudly instead of returning
+                an empty result.
         """
         import time
 
@@ -508,19 +533,14 @@ class Planner:
         self.stats = PlanStats()
         h_fn = heuristic_fn or self.heuristic_fn
 
-        try:
-            world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
+        world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
 
-            if goal.is_satisfied(world_state):
-                self.stats.execution_time = time.time() - start_time
-                return PlanResult(plan=[], message="✅ Goal is already satisfied!")
+        if goal.is_satisfied(world_state):
+            self.stats.execution_time = time.time() - start_time
+            return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-            plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
-            return self._finalize_plan_generation(plan, schedule, start_time)
-
-        except Exception as e:
-            logger.exception("Error during planning")
-            return PlanResult(plan=None, message=f"❌ Error during planning: {str(e)}")
+        plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
+        return self._finalize_plan_generation(plan, schedule, start_time)
 
     def continue_plan(
         self,
@@ -544,6 +564,13 @@ class Planner:
 
         Returns:
             PlanResult with the remaining plan steps
+
+        Raises:
+            TypeError: If the inputs have invalid types.
+            ValueError: If the inputs are invalid.
+            Exception: Any error from predicates, providers, or hooks
+                propagates -- planning fails loudly instead of returning
+                an empty result.
         """
         import time
 
@@ -552,71 +579,64 @@ class Planner:
         self.stats = PlanStats()
         h_fn = heuristic_fn or self.heuristic_fn
 
-        try:
-            world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
+        world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
 
-            if goal.is_satisfied(world_state):
-                self.stats.execution_time = time.time() - start_time
-                return PlanResult(plan=[], message="✅ Goal is already satisfied!")
-
-            # Find plan from current state
-            plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
-
-            if not plan:
-                return self._finalize_plan_generation([], None, start_time)
-
-            # Filter out already executed actions from the beginning of the plan.
-            # Only a leading run matching the executed sequence in order is
-            # stripped: executed actions that are not a prefix of the fresh
-            # plan are left alone so needed later steps are never dropped.
-            remaining_plan = list(plan)
-            for executed_name in executed_actions:
-                if remaining_plan and remaining_plan[0] == executed_name:
-                    remaining_plan.pop(0)
-                else:
-                    break
-
-            if not remaining_plan:
-                self.stats.execution_time = time.time() - start_time
-                return PlanResult(
-                    plan=[],
-                    message="✅ All executed actions complete the plan!",
-                    schedule=None,
-                )
-
-            # Skip already-executed actions from the beginning of the plan
-            if hasattr(self, "_reconstruct_plan"):
-                # We could rebuild schedule for remaining actions, but for simplicity
-                # just return the remaining plan without schedule
-                pass
-
-            self.stats.plan_length = len(remaining_plan)
+        if goal.is_satisfied(world_state):
             self.stats.execution_time = time.time() - start_time
+            return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-            self._log(logging.INFO, "\n" + "=" * 50)
-            self._log(logging.INFO, "CONTINUED PLAN GENERATION COMPLETE")
-            self._log(logging.INFO, "=" * 50)
+        # Find plan from current state
+        plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
 
-            self._log(
-                logging.INFO,
-                f"\n[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
-            )
-            self._log(logging.INFO, "\nPLAN STEPS:")
-            for i, action_name in enumerate(remaining_plan, 1):
-                self._log(logging.INFO, f"  {i}. {action_name}")
-            self._display_statistics()
-            self._trigger_hook("on_plan_found", plan=remaining_plan, stats=self.stats)
+        if not plan:
+            return self._finalize_plan_generation([], None, start_time)
 
+        # Filter out already executed actions from the beginning of the plan.
+        # Only a leading run matching the executed sequence in order is
+        # stripped: executed actions that are not a prefix of the fresh
+        # plan are left alone so needed later steps are never dropped.
+        remaining_plan = list(plan)
+        for executed_name in executed_actions:
+            if remaining_plan and remaining_plan[0] == executed_name:
+                remaining_plan.pop(0)
+            else:
+                break
+
+        if not remaining_plan:
+            self.stats.execution_time = time.time() - start_time
             return PlanResult(
-                plan=remaining_plan,
-                message=f"[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
+                plan=[],
+                message="✅ All executed actions complete the plan!",
+                schedule=None,
             )
 
-        except Exception as e:
-            logger.exception("Error during continued planning")
-            return PlanResult(
-                plan=None, message=f"❌ Error during continued planning: {str(e)}"
-            )
+        # Skip already-executed actions from the beginning of the plan
+        if hasattr(self, "_reconstruct_plan"):
+            # We could rebuild schedule for remaining actions, but for simplicity
+            # just return the remaining plan without schedule
+            pass
+
+        self.stats.plan_length = len(remaining_plan)
+        self.stats.execution_time = time.time() - start_time
+
+        self._log(logging.INFO, "\n" + "=" * 50)
+        self._log(logging.INFO, "CONTINUED PLAN GENERATION COMPLETE")
+        self._log(logging.INFO, "=" * 50)
+
+        self._log(
+            logging.INFO,
+            f"\n[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
+        )
+        self._log(logging.INFO, "\nPLAN STEPS:")
+        for i, action_name in enumerate(remaining_plan, 1):
+            self._log(logging.INFO, f"  {i}. {action_name}")
+        self._display_statistics()
+        self._trigger_hook("on_plan_found", plan=remaining_plan, stats=self.stats)
+
+        return PlanResult(
+            plan=remaining_plan,
+            message=f"[SUCCESS] Found remaining plan with {len(remaining_plan)} actions",
+        )
 
     async def async_generate_plan(
         self,
@@ -625,7 +645,15 @@ class Planner:
         max_depth: int | None = None,
         heuristic_fn: HeuristicFn | None = None,
     ) -> PlanResult:
-        """Asynchronously generate a plan."""
+        """Asynchronously generate a plan.
+
+        Raises:
+            TypeError: If the inputs have invalid types.
+            ValueError: If the inputs are invalid.
+            Exception: Any error from predicates, providers, or hooks
+                propagates -- planning fails loudly instead of returning
+                an empty result.
+        """
         import time
 
         self._print_header(goal)
@@ -633,21 +661,14 @@ class Planner:
         self.stats = PlanStats()
         h_fn = heuristic_fn or self.heuristic_fn
 
-        try:
-            world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
+        world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
 
-            if goal.is_satisfied(world_state):
-                self.stats.execution_time = time.time() - start_time
-                return PlanResult(plan=[], message="✅ Goal is already satisfied!")
+        if goal.is_satisfied(world_state):
+            self.stats.execution_time = time.time() - start_time
+            return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-            plan, schedule = await self._async_find_plan(
-                world_state, goal, max_depth, h_fn
-            )
-            return self._finalize_plan_generation(plan, schedule, start_time)
-
-        except Exception as e:
-            logger.exception("Error during async planning")
-            return PlanResult(plan=None, message=f"❌ Error during planning: {str(e)}")
+        plan, schedule = await self._async_find_plan(world_state, goal, max_depth, h_fn)
+        return self._finalize_plan_generation(plan, schedule, start_time)
 
     def _print_header(self, goal: Goal | dict[str, Any]) -> None:
         """Print planning header information."""
@@ -721,13 +742,14 @@ class Planner:
     def _get_all_available_actions(
         self, state: WorldState, goal: Goal | None = None
     ) -> list[Action]:
-        """Query all providers for available actions."""
+        """Query all providers for available actions.
+
+        Provider errors propagate to the caller -- a broken provider fails
+        loudly instead of being silently skipped.
+        """
         all_actions = []
         for provider in self.providers:
-            try:
-                all_actions.extend(provider.provide_actions(state, goal))
-            except Exception as e:
-                logger.error("Error providing actions from %s: %s", provider, e)
+            all_actions.extend(provider.provide_actions(state, goal))
         return all_actions
 
     def _find_plan(
@@ -757,7 +779,11 @@ class Planner:
             "action": None,
         }
         frontier: list[tuple[float, int, Node]] = []
-        heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
+        # Monotonic tiebreak: entries with equal f-score expand in insertion
+        # order, so repeated searches return identical plans. (id(node) was
+        # nondeterministic: freed addresses get reused across runs.)
+        tiebreak = itertools.count()
+        heapq.heappush(frontier, (start_node.f_score, next(tiebreak), start_node))
 
         g_scores: dict[StateKey, float] = {hash(world_state): 0}
         iteration = 0
@@ -804,7 +830,7 @@ class Planner:
                     continue
 
                 g_scores[new_state_key] = tentative_g_score
-                heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
+                heapq.heappush(frontier, (new_node.f_score, next(tiebreak), new_node))
 
                 # Track in search graph
                 new_id = id(new_node)
@@ -858,7 +884,11 @@ class Planner:
             "action": None,
         }
         frontier: list[tuple[float, int, Node]] = []
-        heapq.heappush(frontier, (start_node.f_score, id(start_node), start_node))
+        # Monotonic tiebreak: entries with equal f-score expand in insertion
+        # order, so repeated searches return identical plans. (id(node) was
+        # nondeterministic: freed addresses get reused across runs.)
+        tiebreak = itertools.count()
+        heapq.heappush(frontier, (start_node.f_score, next(tiebreak), start_node))
 
         g_scores: dict[StateKey, float] = {hash(world_state): 0}
         iteration = 0
@@ -904,7 +934,7 @@ class Planner:
                     continue
 
                 g_scores[new_state_key] = tentative_g_score
-                heapq.heappush(frontier, (new_node.f_score, id(new_node), new_node))
+                heapq.heappush(frontier, (new_node.f_score, next(tiebreak), new_node))
 
                 # Track in search graph
                 new_id = id(new_node)

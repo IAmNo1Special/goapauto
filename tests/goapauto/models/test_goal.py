@@ -84,14 +84,24 @@ class TestGoal:
         # WorldState always allows extra attrs, but a missing one returns None
         assert not goal.is_satisfied(WorldState())
 
-    def test_satisfaction_callable_attribute_error(self):
-        """Test is_satisfied catches AttributeError from callable conditions."""
+    def test_satisfaction_callable_error_propagates(self):
+        """Test is_satisfied lets predicate errors propagate (fail loudly)."""
 
         def exploding(value):
             raise AttributeError("boom")
 
         goal = Goal(target_state={"x": exploding})
-        assert not goal.is_satisfied(WorldState(x=1))
+        with pytest.raises(AttributeError, match="boom"):
+            goal.is_satisfied(WorldState(x=1))
+
+    def test_missing_key_never_satisfies_goal(self):
+        """A missing key fails goal satisfaction even when desired is None."""
+        goal = Goal(target_state={"x": None})
+        assert not goal.is_satisfied(WorldState())
+        assert "x" in goal.get_unsatisfied_conditions(WorldState())
+
+        # ...but an explicitly-set None still satisfies.
+        assert goal.is_satisfied(WorldState(x=None))
 
     def test_unsatisfied_conditions_callable(self):
         """Test get_unsatisfied_conditions with callable conditions."""

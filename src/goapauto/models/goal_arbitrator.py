@@ -32,6 +32,9 @@ class GoalArbitrator:
 
     The arbitrator uses a selection strategy to decide which goal the
     agent should focus on based on the current world state.
+
+    Thread safety: not thread-safe. Use one GoalArbitrator per thread; do
+    not share it across threads without external synchronization.
     """
 
     def __init__(

@@ -237,12 +237,13 @@ class TestActionModel:
         assert action.is_applicable(WorldState(wood=10))
         assert not action.is_applicable(WorldState(wood=3))
 
-        # Exception during applicability check returns False
+        # Exception during applicability check propagates (fail loudly)
         def broken(value):
             raise RuntimeError("boom")
 
         action2 = Action(name="broken", preconditions={"x": broken}, effects={})
-        assert not action2.is_applicable(WorldState(x=1))
+        with pytest.raises(RuntimeError, match="boom"):
+            action2.is_applicable(WorldState(x=1))
 
     def test_apply_not_applicable_raises(self):
         """Test apply raises when not applicable."""

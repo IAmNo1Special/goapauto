@@ -10,7 +10,7 @@ planner = Planner(
     max_iterations=1000,
     heuristic_fn=custom_heuristic,
     verbose=True,          # print progress (default: True)
-    logger=my_logger,      # custom logging.Logger
+    logger=logger,         # custom logging.Logger
     cost_weights={         # weights for multi-dimensional costs
         "time": 1.0,
         "energy": 0.5

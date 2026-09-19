@@ -1,3 +1,5 @@
+import pytest
+
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 
@@ -46,8 +48,8 @@ class TestSensors:
         assert state.a == 1
         assert state.b == 2
 
-    def test_sensor_error_handling(self, mocker, caplog):
-        """Test that one sensor failing doesn't stop others."""
+    def test_sensor_error_propagates(self, mocker):
+        """Test that a failing sensor raises instead of being skipped."""
         bad_sensor = mocker.Mock(spec=Sensor)
         bad_sensor.sense.side_effect = Exception("Boom")
 
@@ -57,12 +59,8 @@ class TestSensors:
         manager = SensorManager(sensors=[bad_sensor, good_sensor])
         state = WorldState()
 
-        manager.update_state(state)
-
-        # Good data should still be present
-        assert state.ok is True
-        # Error should be logged
-        assert "Sensor error" in caplog.text
+        with pytest.raises(Exception, match="Boom"):
+            manager.update_state(state)
 
 
 class TestSensorManagerInit:

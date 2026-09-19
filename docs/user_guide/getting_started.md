@@ -155,7 +155,7 @@ planner = Planner(actions_list=actions, verbose=False)
 # Custom logger
 import logging
 logger = logging.getLogger("my_planner")
-planner = Planner(actions_list=actions, logger=my_logger)
+planner = Planner(actions_list=actions, logger=logger)
 
 # Multi-dimensional cost optimization
 planner = Planner(

@@ -24,7 +24,11 @@ class Sensor(ABC):
 
 
 class SensorManager:
-    """Manages a collection of sensors and updates WorldState."""
+    """Manages a collection of sensors and updates WorldState.
+
+    Thread safety: not thread-safe. Use one SensorManager per thread; do not
+    share it across threads without external synchronization.
+    """
 
     def __init__(self, sensors: list[Sensor] | None = None) -> None:
         self.sensors = list(sensors) if sensors is not None else []
@@ -36,6 +40,9 @@ class SensorManager:
     def update_state(self, state: WorldState) -> WorldState:
         """Update the given state with data from all sensors.
 
+        Sensor errors propagate to the caller -- a broken sensor fails
+        loudly instead of being silently skipped.
+
         Args:
             state: The current world state
 
@@ -44,13 +51,7 @@ class SensorManager:
         """
         updates = {}
         for sensor in self.sensors:
-            try:
-                updates.update(sensor.sense())
-            except Exception as e:
-                # Log error but continue with other sensors
-                import logging
-
-                logging.getLogger(__name__).error("Sensor error: %s", e)
+            updates.update(sensor.sense())
 
         # Update the state with all sensed data
         for key, value in updates.items():

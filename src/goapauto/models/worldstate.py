@@ -4,7 +4,7 @@ import logging
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from goapauto.models.actions import _UNSET_SENTINEL, Decrement, Effect, Increment, Set
 
@@ -13,6 +13,23 @@ T = TypeVar("T", bound="WorldState")
 
 # Sentinel for unknown/missing values (distinct from False/None)
 _UNKNOWN = object()
+
+
+def _check_hashable(name: str, value: Any) -> None:
+    """Reject unhashable state values with a clear error.
+
+    The planner hashes states during search, so an unhashable value would
+    crash planning later with a cryptic error. Failing here -- at the write
+    -- names the offending key and value type up front.
+    """
+    try:
+        hash(value)
+    except TypeError as exc:
+        raise TypeError(
+            f"WorldState value for {name!r} must be hashable, got "
+            f"{type(value).__name__!r}; the planner hashes states during "
+            "search, so unhashable values cannot be stored."
+        ) from exc
 
 
 class WorldState(BaseModel):
@@ -29,6 +46,33 @@ class WorldState(BaseModel):
     )
 
     # Custom __init__ removed to enforce strict keyword-only Pydantic API.
+
+    @model_validator(mode="after")
+    def _validate_value_hashability(self: T) -> T:
+        """Reject unhashable values at construction time (see _check_hashable).
+
+        Checks the stored values (not model_dump(), which serializes nested
+        models into dicts and would false-positive on them).
+        """
+        stored: dict[str, Any] = {
+            key: value
+            for key, value in self.__dict__.items()
+            if not key.startswith("_")
+        }
+        stored.update(self.__pydantic_extra__ or {})
+        for key, value in stored.items():
+            _check_hashable(key, value)
+        return self
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Set an attribute, rejecting unhashable values up front.
+
+        Private/dunder names (pydantic internals) skip the check; every
+        real state key must stay hashable so the planner can hash states.
+        """
+        if not name.startswith("_"):
+            _check_hashable(name, value)
+        super().__setattr__(name, value)
 
     def __getitem__(self, key: str) -> Any:
         """Get a state value using dictionary access."""
