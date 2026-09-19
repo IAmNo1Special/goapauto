@@ -23,7 +23,7 @@
 - bump pydantic from 2.13.4 to 2.13.5
 - bump mypy from 2.3.0 to 2.3.1
 - bump mdformat-mkdocs from 5.2.1 to 5.3.0
-- update uv-build requirement from <0.12.0,>=0.8.8 to >=0.8.8,<0.13.0
+- update uv-build requirement from \<0.12.0,>=0.8.8 to >=0.8.8,\<0.13.0
 - cover Windows console no-op branch on all platforms
 - 3.12-only CI matrix and Linux-runnable console setup tests
 - implement ActionProvider protocol for StaticActionProvider
