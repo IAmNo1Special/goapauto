@@ -86,7 +86,10 @@ scheduling, and search-tree visualization. Built on Pydantic for validation.
     `.github/scripts/generate_release_notes.py` to regenerate `CHANGELOG.md`
     and `RELEASE_NOTES.md`, commits them, creates a GitHub Release, and
     publishes to PyPI. Do not manually edit those files for a release.
-- Release flow: bump version (both files above) → `chore: bump version to X.Y.Z` → tag `vX.Y.Z` → push `main` and the tag.
+- Release flow: bump `__version__` + `version` together, commit as
+    `chore: bump version to X.Y.Z`, push `main`. CI's `tag` job pushes the
+    `vX.Y.Z` tag once lint + tests pass, which triggers `release.yml`
+    (changelog, GitHub Release, PyPI upload). Never push tags manually.
 - CI (`ci.yml`) enforces ruff, formatting, mypy, mdformat, and the test +
     coverage gate on `main` and PRs.
 
