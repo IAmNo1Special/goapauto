@@ -567,3 +567,45 @@ class TestJevGoalStrategy:
         assert selected.name == "Sleep"
         (_, called_questions), _ = api.system_one.call_args
         assert set(called_questions["goal"].criteria) == {"Sleep"}
+
+
+class TestClientLifecycle:
+    def test_sensor_default_client_uses_legacy_timeout(self, mocker):
+        """A default-constructed client keeps the pre-SDK 30s timeout."""
+        client_cls = mocker.patch("goapauto.models.jev.TypeSafeClient")
+        JevSensor(observe=lambda: {}, questions=questions())
+        client_cls.assert_called_once_with(timeout=30.0)
+
+    def test_sensor_close_closes_owned_client(self, mocker):
+        """close() releases the pool of a client the sensor created."""
+        client_cls = mocker.patch("goapauto.models.jev.TypeSafeClient")
+        sensor = JevSensor(observe=lambda: {}, questions=questions())
+        sensor.close()
+        client_cls.return_value.close.assert_called_once_with()
+
+    def test_sensor_close_leaves_provided_client_open(self, mocker):
+        """close() never closes a caller-provided client."""
+        client = mocker.Mock()
+        sensor = JevSensor(observe=lambda: {}, questions=questions(), client=client)
+        sensor.close()
+        client.close.assert_not_called()
+
+    def test_strategy_default_client_uses_legacy_timeout(self, mocker):
+        """A default-constructed client keeps the pre-SDK 30s timeout."""
+        client_cls = mocker.patch("goapauto.models.jev.TypeSafeClient")
+        JevGoalStrategy()
+        client_cls.assert_called_once_with(timeout=30.0)
+
+    def test_strategy_close_closes_owned_client(self, mocker):
+        """close() releases the pool of a client the strategy created."""
+        client_cls = mocker.patch("goapauto.models.jev.TypeSafeClient")
+        strategy = JevGoalStrategy()
+        strategy.close()
+        client_cls.return_value.close.assert_called_once_with()
+
+    def test_strategy_close_leaves_provided_client_open(self, mocker):
+        """close() never closes a caller-provided client."""
+        client = mocker.Mock()
+        strategy = JevGoalStrategy(client=client)
+        strategy.close()
+        client.close.assert_not_called()

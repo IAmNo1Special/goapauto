@@ -211,7 +211,7 @@ class TestNode:
 
         assert n1.__eq__("not-a-node") is NotImplemented
         assert hash(n1) == hash(
-            (hash(state), hash(frozenset(goal.target_state.items())), 0)
+            (hash(state), hash(frozenset(goal.target_state.items())))
         )
 
     def test_hash_with_dict_goal(self):
@@ -233,3 +233,34 @@ class TestNode:
         assert "inc" in str(child)
         assert "depth=1" in repr(child)
         assert "action=Action" in repr(child)
+
+
+class TestNodeHash:
+    def test_hash_with_action_does_not_raise(self):
+        """Node.__hash__ works when the node has an action (Action is unhashable)."""
+        action = Action(name="inc", preconditions={}, effects={"a": 1}, cost=1.0)
+        node = Node(
+            state=WorldState(a=0),
+            parent=None,
+            goal=Goal(target_state={"a": 1}),
+            action=action,
+        )
+        assert isinstance(hash(node), int)
+
+    def test_hash_consistent_with_eq(self):
+        """Equal nodes (same state+goal, different actions) hash equally."""
+        goal = Goal(target_state={"a": 1})
+        a1 = Action(name="one", preconditions={}, effects={"a": 1}, cost=1.0)
+        a2 = Action(name="two", preconditions={}, effects={"a": 1}, cost=2.0)
+        n1 = Node(state=WorldState(a=0), parent=None, goal=goal, action=a1)
+        n2 = Node(state=WorldState(a=0), parent=None, goal=goal, action=a2)
+        assert n1 == n2
+        assert hash(n1) == hash(n2)
+
+    def test_hash_differs_for_different_states(self):
+        """Nodes with different states hash differently."""
+        goal = Goal(target_state={"a": 1})
+        n1 = Node(state=WorldState(a=0), parent=None, goal=goal)
+        n2 = Node(state=WorldState(a=9), parent=None, goal=goal)
+        assert n1 != n2
+        assert hash(n1) != hash(n2)

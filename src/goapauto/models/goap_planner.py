@@ -148,7 +148,7 @@ class Planner:
                 If list: weights correspond to cost list indices
                 If None: actions must use scalar costs
         """
-        self.providers = providers or []
+        self.providers = list(providers) if providers is not None else []
         if actions_list:
             static_actions = Actions()
             static_actions.add_actions(actions_list)
@@ -158,7 +158,7 @@ class Planner:
         self.stats = PlanStats()
         self.heuristic_fn = heuristic_fn
         self.verbose = verbose
-        self._logger = logger or logger
+        self._logger = logger if logger is not None else logging.getLogger(__name__)
         self.cost_weights = cost_weights
 
         # Hook system for middleware
@@ -565,16 +565,16 @@ class Planner:
             if not plan:
                 return self._finalize_plan_generation([], None, start_time)
 
-            # Filter out already executed actions from the beginning of the plan
-            remaining_plan = []
-            executed_set = set(executed_actions)
-            skip_count = 0
-
-            for action_name in plan:
-                if action_name in executed_set and skip_count < len(executed_actions):
-                    skip_count += 1
-                    continue
-                remaining_plan.append(action_name)
+            # Filter out already executed actions from the beginning of the plan.
+            # Only a leading run matching the executed sequence in order is
+            # stripped: executed actions that are not a prefix of the fresh
+            # plan are left alone so needed later steps are never dropped.
+            remaining_plan = list(plan)
+            for executed_name in executed_actions:
+                if remaining_plan and remaining_plan[0] == executed_name:
+                    remaining_plan.pop(0)
+                else:
+                    break
 
             if not remaining_plan:
                 self.stats.execution_time = time.time() - start_time
@@ -794,6 +794,10 @@ class Planner:
                     new_state, current_node, goal, action, heuristic_fn=heuristic_fn
                 )
                 new_node.g_score = tentative_g_score
+                # Node.__init__ computed f from its own g-score estimate; the
+                # planner's weighted scalar cost above replaces it, so f must
+                # be recomputed to keep heap ordering correct.
+                new_node.f_score = new_node.g_score + new_node.h_score
 
                 # Respect the max_depth limit for nodes added to the frontier
                 if max_depth is not None and new_node.depth() > max_depth:
@@ -890,6 +894,10 @@ class Planner:
                     new_state, current_node, goal, action, heuristic_fn=heuristic_fn
                 )
                 new_node.g_score = tentative_g_score
+                # Node.__init__ computed f from its own g-score estimate; the
+                # planner's weighted scalar cost above replaces it, so f must
+                # be recomputed to keep heap ordering correct.
+                new_node.f_score = new_node.g_score + new_node.h_score
 
                 # Respect the max_depth limit for nodes added to the frontier
                 if max_depth is not None and new_node.depth() > max_depth:

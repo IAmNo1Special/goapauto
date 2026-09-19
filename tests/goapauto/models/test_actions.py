@@ -483,3 +483,68 @@ class TestActionsCollection:
 
         assert "2" in str(actions) or "1" in str(actions)
         assert "Actions" in repr(actions)
+
+
+class TestUnsetEffects:
+    def test_unset_effect_removes_key_via_apply(self):
+        """Unset() through Action.apply deletes the key (no sentinel leak)."""
+        action = Action(
+            name="drop",
+            preconditions={"holding": True},
+            effects={"holding": Unset()},
+            cost=1,
+        )
+        result = action.apply(WorldState(holding=True))
+        assert "holding" not in result
+        assert result.get("holding", "<MISSING>") == "<MISSING>"
+
+    def test_delete_alias_removes_key_via_apply(self):
+        """Delete() (alias of Unset) also deletes the key via apply."""
+        action = Action(
+            name="drop",
+            preconditions={"holding": True},
+            effects={"holding": Delete()},
+            cost=1,
+        )
+        result = action.apply(WorldState(holding=True))
+        assert "holding" not in result
+
+    def test_unset_missing_key_is_noop(self):
+        """Unsetting a key that was never set does not raise."""
+        action = Action(
+            name="drop", preconditions={}, effects={"gone": Unset()}, cost=1
+        )
+        result = action.apply(WorldState(other=1))
+        assert "gone" not in result
+        assert result.other == 1
+
+    def test_other_effects_unaffected_by_unset(self):
+        """Unset removes its key while sibling effects still apply."""
+        action = Action(
+            name="swap",
+            preconditions={},
+            effects={"old": Unset(), "new": Set("yes")},
+            cost=1,
+        )
+        result = action.apply(WorldState(old=1))
+        assert "old" not in result
+        assert result.new == "yes"
+
+    async def test_async_unset_effect_removes_key(self):
+        """Unset() through Action.async_apply deletes the key."""
+        action = Action(
+            name="drop",
+            preconditions={"holding": True},
+            effects={"holding": Unset()},
+            cost=1,
+        )
+        result = await action.async_apply(WorldState(holding=True))
+        assert "holding" not in result
+
+    async def test_async_unset_missing_key_is_noop(self):
+        """Async Unset of a missing key does not raise."""
+        action = Action(
+            name="drop", preconditions={}, effects={"gone": Unset()}, cost=1
+        )
+        result = await action.async_apply(WorldState(other=1))
+        assert "gone" not in result

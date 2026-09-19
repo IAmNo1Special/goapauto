@@ -239,18 +239,17 @@ class Node:
         return self.state == other.state and self.goal == other.goal
 
     def __hash__(self) -> int:
-        """Compute a hash value for this node."""
-        return hash(
-            (
-                hash(self.state),
-                (
-                    hash(frozenset(self.goal.target_state.items()))
-                    if hasattr(self.goal, "target_state")
-                    else hash(frozenset(self.goal.items()))
-                ),
-                hash(self.action) if self.action is not None else 0,
-            )
-        )
+        """Compute a hash value for this node.
+
+        Hashes state and goal only, matching __eq__ (which ignores action).
+        Including the action would both violate the hash/eq contract and
+        crash, since Action is an unhashable dataclass.
+        """
+        if hasattr(self.goal, "target_state"):
+            goal_hash = hash(frozenset(self.goal.target_state.items()))
+        else:
+            goal_hash = hash(frozenset(self.goal.items()))
+        return hash((hash(self.state), goal_hash))
 
     def __str__(self) -> str:
         """Return a string representation of the node."""

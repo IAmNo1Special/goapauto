@@ -27,7 +27,7 @@ class SensorManager:
     """Manages a collection of sensors and updates WorldState."""
 
     def __init__(self, sensors: list[Sensor] | None = None) -> None:
-        self.sensors = sensors or []
+        self.sensors = list(sensors) if sensors is not None else []
 
     def add_sensor(self, sensor: Sensor) -> None:
         """Add a sensor to the manager."""

@@ -745,3 +745,91 @@ class TestPlanExecution:
             WorldState(), (unhandled_act,)
         )
         assert tuple_state.done is True
+
+
+class TestPlannerBugfixes:
+    def test_init_does_not_mutate_providers_list(self):
+        """Planner copies the providers list; the caller's list is untouched."""
+        from goapauto.models.action_provider import StaticActionProvider
+        from goapauto.models.actions import Actions
+
+        providers = [StaticActionProvider(Actions())]
+        Planner(
+            providers=providers,
+            actions_list=[("x", {}, {"y": 1}, 1)],
+            verbose=False,
+        )
+        assert len(providers) == 1
+
+    def test_default_logger_is_module_logger(self):
+        """Without a custom logger the planner falls back to the module logger."""
+        import logging
+
+        planner = Planner(actions_list=[], verbose=False)
+        assert planner._logger is logging.getLogger("goapauto.models.goap_planner")
+
+    def test_custom_logger_is_used(self):
+        """A passed-in logger is kept as-is."""
+        import logging
+
+        custom = logging.getLogger("test_custom_planner_logger")
+        planner = Planner(actions_list=[], verbose=False, logger=custom)
+        assert planner._logger is custom
+
+    def _weighted_planner(self):
+        return Planner(
+            actions_list=[
+                ("finish", {}, {"done": True}, {"time": 10.0, "energy": 10.0}),
+            ],
+            cost_weights={"time": 1.0, "energy": 0.0},
+            verbose=False,
+        )
+
+    def test_f_score_matches_weighted_g_plus_h(self):
+        """Heap f-scores use the planner's weighted g, not Node's fallback sum."""
+        planner = self._weighted_planner()
+        result = planner.generate_plan(WorldState(), {"done": True})
+        assert result.plan == ["finish"]
+        for node in planner.get_search_graph()["nodes"].values():
+            assert node["f"] == pytest.approx(node["g"] + node["h"])
+
+    async def test_async_f_score_matches_weighted_g_plus_h(self):
+        """Same f-score invariant for the async search loop."""
+        planner = self._weighted_planner()
+        result = await planner.async_generate_plan(WorldState(), {"done": True})
+        assert result.plan == ["finish"]
+        for node in planner.get_search_graph()["nodes"].values():
+            assert node["f"] == pytest.approx(node["g"] + node["h"])
+
+    def _chain_planner(self):
+        return Planner(
+            actions_list=[
+                ("step1", {"x": 0}, {"x": 1}, 1),
+                ("step2", {"x": 1}, {"x": 2}, 1),
+            ],
+            verbose=False,
+        )
+
+    def test_continue_plan_strips_matching_prefix(self):
+        """Executed leading actions are stripped from the fresh plan."""
+        planner = self._chain_planner()
+        result = planner.continue_plan(
+            WorldState(x=1), {"x": 2}, executed_actions=["step1"]
+        )
+        assert result.plan == ["step2"]
+
+    def test_continue_plan_ignores_non_prefix_executed(self):
+        """Executed actions that are not a prefix must not drop later steps."""
+        planner = self._chain_planner()
+        result = planner.continue_plan(
+            WorldState(x=0), {"x": 2}, executed_actions=["step2"]
+        )
+        assert result.plan == ["step1", "step2"]
+
+    def test_continue_plan_executed_longer_than_plan(self):
+        """An executed list longer than the fresh plan strips at most the plan."""
+        planner = self._chain_planner()
+        result = planner.continue_plan(
+            WorldState(x=0), {"x": 1}, executed_actions=["step1", "step2", "step1"]
+        )
+        assert result.plan == []

@@ -374,7 +374,13 @@ class Action:
                     # Missing attributes are treated as 0 so effects
                     # like Increment/Decrement can create new attributes
                     current_val = getattr(state, attr, 0)
-                    setattr(new_state, attr, effect(current_val))
+                    result = effect(current_val)
+                    if result is _UNSET_SENTINEL:
+                        # Unset/Delete effect - remove the attribute
+                        if hasattr(new_state, attr):
+                            delattr(new_state, attr)
+                    else:
+                        setattr(new_state, attr, result)
                 else:
                     setattr(new_state, attr, effect)
 
@@ -413,9 +419,15 @@ class Action:
                     import inspect
 
                     if inspect.iscoroutinefunction(effect):
-                        setattr(new_state, attr, await effect(current_val))
+                        result = await effect(current_val)
                     else:
-                        setattr(new_state, attr, effect(current_val))
+                        result = effect(current_val)
+                    if result is _UNSET_SENTINEL:
+                        # Unset/Delete effect - remove the attribute
+                        if hasattr(new_state, attr):
+                            delattr(new_state, attr)
+                    else:
+                        setattr(new_state, attr, result)
                 else:
                     setattr(new_state, attr, effect)
 

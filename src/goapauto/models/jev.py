@@ -104,12 +104,24 @@ class JevSensor(Sensor):
             raise TypeSafeError(
                 f"Mapping refers to unknown questions: {sorted(unknown)}"
             )
-        self._client = client or TypeSafeClient()
+        # The SDK's default timeout is 10s; the pre-SDK client used 30s.
+        # Keep the long-standing effective default on migration.
+        self._client = client if client is not None else TypeSafeClient(timeout=30.0)
+        self._owns_client = client is None
         self._min_interval = min_interval
         self._resense_on_change = resense_on_change
         self._cached: dict[str, Any] = {}
         self._last_observation: dict[str, Any] | None = None
         self._last_call: float = 0.0
+
+    def close(self) -> None:
+        """Close the TypeSafe client if this sensor created it.
+
+        Releases the underlying HTTP connection pool. A client passed in
+        by the caller is left open; its lifecycle belongs to the caller.
+        """
+        if self._owns_client:
+            self._client.close()
 
     def sense(self) -> dict[str, Any]:
         """Return judgment-derived state updates, re-querying only when due."""
@@ -176,8 +188,19 @@ class JevGoalStrategy:
         client: TypeSafeClient | None = None,
         instructions: str = "Which goal should the agent pursue next?",
     ) -> None:
-        self._client = client or TypeSafeClient()
+        # See JevSensor: preserve the pre-SDK 30s effective default timeout.
+        self._client = client if client is not None else TypeSafeClient(timeout=30.0)
+        self._owns_client = client is None
         self._instructions = instructions
+
+    def close(self) -> None:
+        """Close the TypeSafe client if this strategy created it.
+
+        Releases the underlying HTTP connection pool. A client passed in
+        by the caller is left open; its lifecycle belongs to the caller.
+        """
+        if self._owns_client:
+            self._client.close()
 
     def select(self, goals: list[Goal], state: WorldState) -> Goal | None:
         """Select the goal Jev judges most worth pursuing right now."""

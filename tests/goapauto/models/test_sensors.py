@@ -63,3 +63,13 @@ class TestSensors:
         assert state.ok is True
         # Error should be logged
         assert "Sensor error" in caplog.text
+
+
+class TestSensorManagerInit:
+    def test_init_does_not_mutate_sensors_list(self, sensor_mock):
+        """SensorManager copies the sensors list; add_sensor won't touch the caller's."""
+        sensors = [sensor_mock]
+        manager = SensorManager(sensors=sensors)
+        manager.add_sensor(sensor_mock)
+        assert len(sensors) == 1
+        assert len(manager.sensors) == 2

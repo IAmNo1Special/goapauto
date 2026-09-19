@@ -203,7 +203,7 @@ result = planner.generate_plan(state, {"x": 5})
 # ['inc', 'inc', 'inc', 'inc', 'inc']
 
 # Execute first action
-state2 = apply_action(state, result.plan[0])  # x=1
+state2 = planner.execute_plan(state, result.plan[:1])  # x=1
 
 # Continue from current state
 remaining = planner.continue_plan(state2, {"x": 5}, executed_actions=["inc"])

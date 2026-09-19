@@ -67,3 +67,13 @@ class TestGoalArbitrator:
         arb.add_goal(g)
         arb.remove_goal("Ghost")
         assert len(arb.goals) == 1
+
+
+class TestGoalArbitratorInit:
+    def test_init_does_not_mutate_goals_list(self):
+        """GoalArbitrator copies the goals list; add_goal won't touch the caller's."""
+        goals = [Goal(target_state={"a": 1}, priority=1, name="g1")]
+        arb = GoalArbitrator(goals=goals)
+        arb.add_goal(Goal(target_state={"b": 2}, priority=2, name="g2"))
+        assert len(goals) == 1
+        assert len(arb.goals) == 2

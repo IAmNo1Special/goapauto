@@ -39,7 +39,7 @@ class GoalArbitrator:
         goals: list[Goal] | None = None,
         strategy: GoalSelectionStrategy | None = None,
     ) -> None:
-        self.goals = goals or []
+        self.goals = list(goals) if goals is not None else []
         self.strategy = strategy or PriorityGoalStrategy()
 
     def add_goal(self, goal: Goal) -> None:
