@@ -1,15 +1,10 @@
-# Release 0.5.0
+# Release 0.6.0
 
-**goapauto 0.5.0** released on 2026-09-20.
-
-## ✨ Features
-
-- judge(), telemetry, FakeTypeSafeClient, shared_client, optional jev extra
+**goapauto 0.6.0** released on 2026-09-21.
 
 ## 🔧 Other
 
-- mdformat RELEASE_NOTES.md (escape < in version spec)
-- mdformat CHANGELOG.md (escape < in version spec)
-- delegate to shared reusable workflow
+- make timing-sensitive tests deterministic on coarse clocks
+- mark 01-04 designs as implemented in 0.6.0
 
 ______________________________________________________________________
