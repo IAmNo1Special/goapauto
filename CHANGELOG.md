@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **01 runtime and replan budgets** — `generate_plan`, `continue_plan`, and
+    `async_generate_plan` accept `time_budget` (wall-clock deadline checked each
+    expansion iteration; on exhaustion the search stops with
+    `PlanStats.budget_exhausted=True` and the `on_budget_exhausted` hook fires).
+    New `ReplanPolicy` (`ReplanReason`, `ReplanDecision`) with fixed evaluation
+    order, suppression order (circuit-breaker then per-tick cap), and
+    `on_replan`/`on_replan_skipped` hooks. Opt-in: budgets default to `None`
+    (unbounded), `ReplanPolicy` is a separate component the host wires in.
+- **02 sensor caching and stale-data behavior** — new `caching.py` with
+    `CachePolicy`, `Staleness` ladder (FRESH/STALE/DEAD), `CachingSensor`
+    wrapper, and per-key TTL merge. `JevSensor` and `JudgmentSensor` accept
+    opt-in `stale_after`/`max_stale`. Default mode is observationally identical
+    to 0.5.0 (proven by the differential fuzz harness in
+    `test_caching_equivalence.py`).
+- **03 cooperative action interruption** — new `execution.py` with the
+    `PlanExecution` handle: `interrupt(reason, source=...)` honored at action
+    boundaries (no mid-action preemption), `PlanInterruptedError` (not a
+    `PlanExecutionError` subclass, so existing handlers never swallow it),
+    `on_execution_interrupted` hook, and `Planner.begin_execution(...)`.
+- **04 confidence gating (opt-in, off by default)** — `GateDecision`,
+    per-question `confidence_thresholds` on `JevSensor`, strategy-level gating
+    with `fallback_policy` on `JevGoalStrategy`, fail-loud
+    `_CorruptConfidenceError` (corrupt confidence is re-raised, never clamped),
+    10 new `JevCallRecord` gate fields, `JevStats.gated`, and a 5-key gating
+    `diagnostics()` payload. With gating off, no confidence data is read.
+- **05 provider-independent judgment interface** — `Judge` protocol,
+    `JevJudge`, `JudgmentSensor`, `JudgmentGoalStrategy`,
+    `JudgmentCallRecord`/`JudgmentStats`, `FakeJudge`, and
+    `JudgmentError(message, backend=..., retryable=...)`. `JevSensor` and
+    `JevGoalStrategy` keep their existing behavior; the interface is additive.
+- **06 why-diagnostics inspector** — new `AgentInspector` in
+    `goapauto.utils`: subscribes to planner and replan hooks, ingests Jev
+    telemetry, answers "why this goal/plan/action?" via tick snapshots and
+    diffs, stop-reason derivation, per-action cost walks, bounded retention,
+    and Markdown + JSONL export.
+
+### Changed
+
+- `JevSensor.diagnostics()` returns the union of 04's gating keys and 02's
+    cache keys (single mapping for 06's consumption).
+- `JevCallRecord` carries 04's 10 gate fields with 02's `staleness` appended
+    after them.
+
+### Stable (unchanged)
+
+- `JevSensor.judge`, `shared_client`, and `FakeTypeSafeClient` behavior is
+    unchanged.
+- Default-mode `JevSensor.sense()` return contract is unchanged (fresh
+    updates on success; cached replay on failure within `max_stale`).
+- Planner search semantics are unchanged when no `time_budget` is passed.
+
 ## [0.5.0] - 2026-09-20
 
 ### Added

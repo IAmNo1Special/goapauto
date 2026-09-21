@@ -65,6 +65,10 @@ nav:
       - Goal: reference/goal.md
       - Actions: reference/actions.md
       - Planner: reference/planner.md
+      - Replan: reference/replan.md
+      - Execution Interruption: reference/execution.md
       - Perception (Sensors/Arbitrator): reference/perception.md
+      - Judgment (Provider-Independent): reference/judgment.md
       - TypeSafe Judgments: reference/jev.md
       - Visualizer: reference/visualizer.md
+      - Inspector (Why Diagnostics): reference/inspector.md

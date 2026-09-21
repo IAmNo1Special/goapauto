@@ -284,6 +284,8 @@ class TestJevSensor:
         assert "Missing answer" in caplog.text
 
     def test_stale_cache_returns_empty_after_max_stale(self, mocker, caplog):
+        now = [1000.0]
+        mocker.patch("time.monotonic", side_effect=lambda: now[0])
         api = mocker.Mock()
         api.system_one.side_effect = [
             sdk_response(),
@@ -300,9 +302,9 @@ class TestJevSensor:
             "threat": "hunting",
             "hunger": 2.0,
         }
-        # Age the last success past max_stale, then fail again: the cache is
-        # dead, so sense() returns no updates instead of ancient judgments.
-        sensor._last_success -= 60.0
+        # Age the cached judgments past max_stale, then fail again: the cache
+        # is dead, so sense() returns no updates instead of ancient judgments.
+        now[0] += 60.0
         assert sensor.sense() == {}
         assert "returning no updates" in caplog.text
 

@@ -4,6 +4,7 @@ import heapq
 import io
 import itertools
 import logging
+import math
 import os
 import sys
 from collections.abc import Callable
@@ -16,6 +17,7 @@ from typing import (
 
 from goapauto.models.action_provider import ActionProvider, StaticActionProvider
 from goapauto.models.actions import Action, Actions
+from goapauto.models.execution import PlanExecution
 from goapauto.models.goal import Goal
 from goapauto.models.node import Node
 from goapauto.models.worldstate import WorldState
@@ -119,6 +121,26 @@ class PlanStats:
     plan_length: int = 0
     total_cost: float = 0.0
     execution_time: float = 0.0
+    budget_exhausted: bool = False
+    budget_limit: float | None = None
+
+
+def _validate_time_budget(time_budget: float | None) -> None:
+    """Validate a per-call planning time budget, fail-loud.
+
+    Shared by the planner entry points and ReplanPolicy (which validates
+    eagerly at construction). ``None`` means unlimited; ``+inf`` is allowed
+    and behaves as unlimited.
+    """
+    if time_budget is None:
+        return
+    if isinstance(time_budget, bool) or not isinstance(time_budget, (int, float)):
+        raise TypeError(
+            "time_budget must be a number of seconds or None, "
+            f"got {type(time_budget).__name__}"
+        )
+    if math.isnan(time_budget) or time_budget <= 0:
+        raise ValueError(f"time_budget must be positive, got {time_budget}")
 
 
 class Planner:
@@ -192,11 +214,13 @@ class Planner:
             "on_node_expanded": [],
             "on_plan_found": [],
             "on_search_failed": [],
+            "on_budget_exhausted": [],
             "on_action_start": [],
             "on_action_complete": [],
             "on_action_failed": [],
             "on_execution_complete": [],
             "on_execution_failed": [],
+            "on_execution_interrupted": [],
         }
 
         self.execution_handlers: dict[str, Callable[..., Any]] = {}
@@ -256,8 +280,8 @@ class Planner:
 
         Args:
             event: One of 'on_node_expanded', 'on_plan_found', 'on_search_failed',
-                'on_action_start', 'on_action_complete', 'on_action_failed',
-                'on_execution_complete', 'on_execution_failed'
+                'on_budget_exhausted', 'on_action_start', 'on_action_complete',
+                'on_action_failed', 'on_execution_complete', 'on_execution_failed'
             callback: The function to call when the event occurs
         """
         if event in self.hooks:
@@ -290,6 +314,26 @@ class Planner:
                 if action.name == action_name:
                     return action
         return None
+
+    def get_action(
+        self, name: str, state: WorldState, *, goal: Goal | None = None
+    ) -> Action | None:
+        """Look up an action by name across all registered ActionProviders.
+
+        Public form of the provider lookup the planner uses internally.
+        Re-queries providers on every call, so dynamic (e.g. model-backed)
+        providers are always fresh -- with expensive providers that is a
+        provider call per invocation.
+
+        Args:
+            name: The action name to look up
+            state: The WorldState context for dynamic providers
+            goal: Optional Goal context for dynamic providers
+
+        Returns:
+            The matching Action, or None if no provider offers that name.
+        """
+        return self._get_action_by_name(name, state, goal)
 
     def execute_plan(
         self,
@@ -485,6 +529,72 @@ class Planner:
         self._trigger_hook("on_execution_complete", state=current_state)
         return current_state
 
+    def begin_execution(
+        self,
+        initial_state: WorldState,
+        plan: Plan | list[Action] | PlanResult,
+        goal: Goal | None = None,
+    ) -> PlanExecution:
+        """Begin an interruptible execution of a plan, returning a handle.
+
+        The handle (:class:`goapauto.models.execution.PlanExecution`) lets
+        callers interrupt the in-flight run between actions via
+        ``execution.interrupt(reason, source=...)`` -- from another thread, a
+        hook, or a watchdog. Run it with ``execution.run()`` /
+        ``execution.arun()``; an honored interrupt raises
+        :class:`goapauto.models.execution.PlanInterruptedError` carrying the
+        partial state, executed/remaining actions, and the reason.
+
+        Container/step *type* validation happens eagerly here (fail fast);
+        action-name resolution stays lazy per step because providers are
+        state-dependent. Steps are normalized to action-name strings at
+        ``begin_execution`` time. The deep copy of ``initial_state`` happens
+        at ``run()``/``arun()`` start, not here -- parity with
+        ``execute_plan`` (same TOCTOU contract).
+
+        Args:
+            initial_state: Starting WorldState
+            plan: Sequence of action names, Action objects, or a PlanResult
+            goal: Optional Goal context for dynamic action providers
+
+        Returns:
+            A PlanExecution handle for the normalized plan
+
+        Raises:
+            TypeError: If initial_state/plan has an invalid type
+            ValueError: If PlanResult.plan is None
+        """
+        if not isinstance(initial_state, WorldState):
+            raise TypeError("initial_state must be a WorldState instance")
+
+        raw_steps: list[str | Action] = []
+        if hasattr(plan, "plan") and hasattr(plan, "message"):
+            p_plan = plan.plan
+            if p_plan is None:
+                raise ValueError("PlanResult contains no valid plan to execute.")
+            raw_steps = list(p_plan)
+        elif isinstance(plan, list):
+            raw_steps = list(plan)
+        elif isinstance(plan, tuple):
+            raw_steps = list(plan)
+        else:
+            raise TypeError(
+                "plan must be a list of action names/Action objects or a PlanResult"
+            )
+
+        names: list[str] = []
+        for step in raw_steps:
+            if isinstance(step, Action):
+                names.append(step.name)
+            elif isinstance(step, str):
+                names.append(step)
+            else:
+                raise TypeError(
+                    f"Plan step must be an Action or action name string, got {type(step)}"
+                )
+
+        return PlanExecution(self, initial_state, names, goal)
+
     def _trigger_hook(self, event: str, *args, **kwargs) -> None:
         """Trigger all registered callbacks for an event.
 
@@ -516,6 +626,7 @@ class Planner:
         goal: dict[str, Any] | Goal,
         max_depth: int | None = None,
         heuristic_fn: HeuristicFn | None = None,
+        time_budget: float | None = None,
     ) -> PlanResult:
         """Generate a plan to achieve the given goal.
 
@@ -525,6 +636,12 @@ class Planner:
             max_depth: Optional maximum depth for the search
             heuristic_fn: Optional custom heuristic function for this plan.
                 When omitted the search runs Dijkstra's algorithm (h=0).
+            time_budget: Optional wall-clock budget in seconds for the search.
+                When the deadline passes the search stops and the result
+                reports the miss explicitly (``plan`` is None,
+                ``stats.budget_exhausted`` is True) instead of hanging the
+                tick. ``None`` (default) means unlimited -- the search
+                behaves exactly as before.
 
         Returns:
             PlanResult. ``plan`` is None when no plan was found.
@@ -536,11 +653,13 @@ class Planner:
                 propagates -- planning fails loudly instead of returning
                 an empty result.
         """
+        _validate_time_budget(time_budget)
         import time
 
         self._print_header(goal)
         start_time = time.time()
         self.stats = PlanStats()
+        self.stats.budget_limit = time_budget
         h_fn = heuristic_fn or self.heuristic_fn
 
         world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
@@ -549,7 +668,8 @@ class Planner:
             self.stats.execution_time = time.time() - start_time
             return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-        plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
+        deadline = time.monotonic() + time_budget if time_budget is not None else None
+        plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn, deadline)
         return self._finalize_plan_generation(plan, schedule, start_time)
 
     def continue_plan(
@@ -559,6 +679,7 @@ class Planner:
         executed_actions: list[str],
         max_depth: int | None = None,
         heuristic_fn: HeuristicFn | None = None,
+        time_budget: float | None = None,
     ) -> PlanResult:
         """Continue planning from a checkpoint after executing some actions.
 
@@ -571,6 +692,8 @@ class Planner:
             executed_actions: List of action names that have already been executed
             max_depth: Optional maximum depth for the search
             heuristic_fn: Optional custom heuristic function for this plan
+            time_budget: Optional wall-clock budget in seconds for the search.
+                Behaves exactly as in :meth:`generate_plan`.
 
         Returns:
             PlanResult with the remaining plan steps
@@ -582,11 +705,13 @@ class Planner:
                 propagates -- planning fails loudly instead of returning
                 an empty result.
         """
+        _validate_time_budget(time_budget)
         import time
 
         self._print_header(goal)
         start_time = time.time()
         self.stats = PlanStats()
+        self.stats.budget_limit = time_budget
         h_fn = heuristic_fn or self.heuristic_fn
 
         world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
@@ -596,7 +721,8 @@ class Planner:
             return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
         # Find plan from current state
-        plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn)
+        deadline = time.monotonic() + time_budget if time_budget is not None else None
+        plan, schedule = self._find_plan(world_state, goal, max_depth, h_fn, deadline)
 
         if not plan:
             return self._finalize_plan_generation([], None, start_time)
@@ -654,8 +780,17 @@ class Planner:
         goal: dict[str, Any] | Goal,
         max_depth: int | None = None,
         heuristic_fn: HeuristicFn | None = None,
+        time_budget: float | None = None,
     ) -> PlanResult:
         """Asynchronously generate a plan.
+
+        Args:
+            world_state: The current state of the world
+            goal: The goal to achieve
+            max_depth: Optional maximum depth for the search
+            heuristic_fn: Optional custom heuristic function for this plan
+            time_budget: Optional wall-clock budget in seconds for the search.
+                Behaves exactly as in :meth:`generate_plan`.
 
         Raises:
             TypeError: If the inputs have invalid types.
@@ -664,11 +799,13 @@ class Planner:
                 propagates -- planning fails loudly instead of returning
                 an empty result.
         """
+        _validate_time_budget(time_budget)
         import time
 
         self._print_header(goal)
         start_time = time.time()
         self.stats = PlanStats()
+        self.stats.budget_limit = time_budget
         h_fn = heuristic_fn or self.heuristic_fn
 
         world_state, goal = self._validate_and_convert(world_state, goal, max_depth)
@@ -677,7 +814,10 @@ class Planner:
             self.stats.execution_time = time.time() - start_time
             return PlanResult(plan=[], message="✅ Goal is already satisfied!")
 
-        plan, schedule = await self._async_find_plan(world_state, goal, max_depth, h_fn)
+        deadline = time.monotonic() + time_budget if time_budget is not None else None
+        plan, schedule = await self._async_find_plan(
+            world_state, goal, max_depth, h_fn, deadline
+        )
         return self._finalize_plan_generation(plan, schedule, start_time)
 
     def _print_header(self, goal: Goal | dict[str, Any]) -> None:
@@ -743,10 +883,24 @@ class Planner:
                 total_cost=schedule.total_cost if schedule else self.stats.total_cost,
             )
 
-        message = "❌ No valid plan found to achieve the goal."
+        if self.stats.budget_exhausted:
+            # The deadline stopped the search: an explicit miss, not "unsolvable".
+            # on_search_failed fires too (migration note in the docs): a timeout
+            # is discriminable from genuine failure via stats.budget_exhausted.
+            # budget_exhausted is only set under a live deadline, so a limit
+            # was recorded for this call.
+            assert self.stats.budget_limit is not None
+            message = (
+                "⌛ Time budget exhausted "
+                f"({self.stats.budget_limit:.3f}s) before a plan was found."
+            )
+        else:
+            message = "❌ No valid plan found to achieve the goal."
         self._log(logging.INFO, f"\n{message}")
         self._display_statistics()
         self._trigger_hook("on_search_failed", stats=self.stats)
+        if self.stats.budget_exhausted:
+            self._trigger_hook("on_budget_exhausted", stats=self.stats)
         return PlanResult(plan=None, message=message)
 
     def _get_all_available_actions(
@@ -768,8 +922,19 @@ class Planner:
         goal: Goal,
         max_depth: int | None,
         heuristic_fn: HeuristicFn | None,
+        deadline: float | None = None,
     ) -> tuple[Plan, Schedule | None]:
-        """Internal method to find a plan using A* search."""
+        """Internal method to find a plan using A* search.
+
+        Args:
+            deadline: Optional ``time.monotonic()`` timestamp; when set, the
+                search aborts at loop boundaries (before each pop and after
+                each action expansion) once the deadline has passed, sets
+                ``stats.budget_exhausted``, and returns no plan. ``None``
+                disables the checks entirely.
+        """
+        import time
+
         logger.info("Planning to achieve goal: %s", goal)
 
         # Clear previous search graph
@@ -799,6 +964,11 @@ class Planner:
         iteration = 0
 
         while frontier and iteration < self.max_iterations:
+            # Wall-clock bound, checked before the count bound so a tie
+            # inside one iteration deterministically reports the budget.
+            if deadline is not None and time.monotonic() >= deadline:
+                self.stats.budget_exhausted = True
+                return [], None
             iteration += 1
             self.stats.nodes_visited += 1
             _, _, current_node = heapq.heappop(frontier)
@@ -819,6 +989,11 @@ class Planner:
 
                 self.stats.nodes_expanded += 1
                 new_state = action.apply(current_node.state)
+                # A single slow expansion can overrun the budget on its own;
+                # the post-apply check keeps the bound meaningful there too.
+                if deadline is not None and time.monotonic() >= deadline:
+                    self.stats.budget_exhausted = True
+                    return [], None
                 new_state_key = hash(new_state)
                 action_cost = self._get_scalar_cost(action)
                 tentative_g_score = current_node.g_score + action_cost
@@ -873,8 +1048,17 @@ class Planner:
         goal: Goal,
         max_depth: int | None,
         heuristic_fn: HeuristicFn | None,
+        deadline: float | None = None,
     ) -> tuple[Plan, Schedule | None]:
-        """Asynchronously find a plan using A* search."""
+        """Asynchronously find a plan using A* search.
+
+        Args:
+            deadline: Optional ``time.monotonic()`` timestamp; same semantics
+                as in :meth:`_find_plan`. The checks are synchronous and cheap,
+                so no extra awaits are introduced.
+        """
+        import time
+
         logger.info("Async planning to achieve goal: %s", goal)
 
         # Clear previous search graph
@@ -904,6 +1088,11 @@ class Planner:
         iteration = 0
 
         while frontier and iteration < self.max_iterations:
+            # Wall-clock bound, checked before the count bound so a tie
+            # inside one iteration deterministically reports the budget.
+            if deadline is not None and time.monotonic() >= deadline:
+                self.stats.budget_exhausted = True
+                return [], None
             iteration += 1
             self.stats.nodes_visited += 1
             _, _, current_node = heapq.heappop(frontier)
@@ -923,6 +1112,11 @@ class Planner:
 
                 self.stats.nodes_expanded += 1
                 new_state = await action.async_apply(current_node.state)
+                # A single slow expansion can overrun the budget on its own;
+                # the post-apply check keeps the bound meaningful there too.
+                if deadline is not None and time.monotonic() >= deadline:
+                    self.stats.budget_exhausted = True
+                    return [], None
                 new_state_key = hash(new_state)
                 action_cost = self._get_scalar_cost(action)
                 tentative_g_score = current_node.g_score + action_cost

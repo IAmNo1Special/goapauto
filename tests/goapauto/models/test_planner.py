@@ -1,8 +1,10 @@
 import io
 import sys
+import time
 
 import pytest
 
+from goapauto.models.action_provider import ActionProvider
 from goapauto.models.actions import Action, Increment
 from goapauto.models.goal import Goal
 from goapauto.models.goap_planner import (
@@ -864,3 +866,245 @@ class TestPlannerBugfixes:
         ]
         assert all(p == plans[0] for p in plans)
         assert plans[0] == ["left"]
+
+
+class SlowApplyAction(Action):
+    """An action whose apply() sleeps past the planning budget."""
+
+    def apply(self, state):
+        time.sleep(0.05)
+        return super().apply(state)
+
+
+class SlowApplyProvider(ActionProvider):
+    """Provider serving a single slow action that achieves the goal."""
+
+    def provide_actions(self, state, goal=None):
+        return [
+            SlowApplyAction(
+                name="slow",
+                preconditions={},
+                effects={"done": True},
+                cost=1.0,
+            )
+        ]
+
+
+class SlowAsyncApplyAction(Action):
+    """An action whose async_apply() sleeps past the planning budget."""
+
+    async def async_apply(self, state):
+        import asyncio
+
+        await asyncio.sleep(0.05)
+        return await super().async_apply(state)
+
+
+class SlowAsyncApplyProvider(ActionProvider):
+    """Provider serving a single slow async action that achieves the goal."""
+
+    def provide_actions(self, state, goal=None):
+        return [
+            SlowAsyncApplyAction(
+                name="slow_async",
+                preconditions={},
+                effects={"done": True},
+                cost=1.0,
+            )
+        ]
+
+
+class TestTimeBudget:
+    """Per-call planning time budgets (design 01)."""
+
+    def _deep_chain_planner(self, depth=200):
+        actions = [(f"step{i}", {"x": i}, {"x": i + 1}, 1.0) for i in range(depth)]
+        return Planner(actions_list=actions, verbose=False, max_iterations=100000)
+
+    def test_default_path_unchanged(self):
+        """time_budget=None plans normally; flags stay at defaults."""
+        planner = self._deep_chain_planner(depth=5)
+        result = planner.generate_plan(WorldState(x=0), {"x": 5})
+        assert result.plan == [f"step{i}" for i in range(5)]
+        assert planner.stats.budget_exhausted is False
+        assert planner.stats.budget_limit is None
+
+    @pytest.mark.parametrize("bad", [0, 0.0, -1.0, float("nan")])
+    def test_invalid_budget_raises_value_error(self, bad):
+        planner = Planner(actions_list=[], verbose=False)
+        with pytest.raises(ValueError):
+            planner.generate_plan(WorldState(), {"x": 1}, time_budget=bad)
+
+    @pytest.mark.parametrize("bad", ["fast", True, False, object()])
+    def test_non_numeric_budget_raises_type_error(self, bad):
+        planner = Planner(actions_list=[], verbose=False)
+        with pytest.raises(TypeError):
+            planner.generate_plan(WorldState(), {"x": 1}, time_budget=bad)
+
+    def test_validation_runs_before_header(self, capsys):
+        """A bad budget must not print the planning banner (fail-loud first)."""
+        planner = Planner(
+            actions_list=[("a", {}, {"x": 1}, 1.0)],
+            verbose=True,
+        )
+        with pytest.raises(ValueError):
+            planner.generate_plan(WorldState(), {"x": 1}, time_budget=-1.0)
+        captured = capsys.readouterr()
+        assert "GOAL-ORIENTED ACTION PLANNING" not in captured.out
+
+    def test_continue_plan_validation_runs_before_header(self, capsys):
+        planner = Planner(actions_list=[("a", {}, {"x": 1}, 1.0)], verbose=True)
+        with pytest.raises(TypeError):
+            planner.continue_plan(
+                WorldState(), {"x": 1}, executed_actions=[], time_budget="fast"
+            )
+        assert "GOAL-ORIENTED ACTION PLANNING" not in capsys.readouterr().out
+
+    async def test_async_validation_runs_before_header(self, capsys):
+        planner = Planner(actions_list=[("a", {}, {"x": 1}, 1.0)], verbose=True)
+        with pytest.raises(ValueError):
+            await planner.async_generate_plan(
+                WorldState(), {"x": 1}, time_budget=float("nan")
+            )
+        assert "GOAL-ORIENTED ACTION PLANNING" not in capsys.readouterr().out
+
+    def test_exhaustion_reports_explicit_miss(self):
+        """Tiny budget on a deep chain: plan None, flag set, limit recorded."""
+        planner = self._deep_chain_planner()
+        result = planner.generate_plan(WorldState(x=0), {"x": 200}, time_budget=1e-6)
+        assert result.plan is None
+        assert "budget" in result.message.lower()
+        assert planner.stats.budget_exhausted is True
+        assert planner.stats.budget_limit == 1e-6
+
+    def test_slow_apply_overrun_still_reports_exhaustion(self):
+        """The post-apply deadline check catches a single slow expansion."""
+        planner = Planner(providers=[SlowApplyProvider()], verbose=False)
+        result = planner.generate_plan(WorldState(), {"done": True}, time_budget=0.01)
+        assert result.plan is None
+        assert planner.stats.budget_exhausted is True
+        assert "budget" in result.message.lower()
+
+    async def test_slow_async_apply_overrun_still_reports_exhaustion(self):
+        """The async post-apply deadline check catches a slow coroutine."""
+        planner = Planner(providers=[SlowAsyncApplyProvider()], verbose=False)
+        result = await planner.async_generate_plan(
+            WorldState(), {"done": True}, time_budget=0.01
+        )
+        assert result.plan is None
+        assert planner.stats.budget_exhausted is True
+        assert "budget" in result.message.lower()
+
+    def test_max_iterations_wins_when_smaller(self):
+        """Iterations exhausted first: old message, flag stays False."""
+        planner = Planner(
+            actions_list=[
+                ("step1", {"x": 0}, {"x": 1}, 1.0),
+                ("step2", {"x": 1}, {"x": 2}, 1.0),
+            ],
+            verbose=False,
+            max_iterations=1,
+        )
+        result = planner.generate_plan(WorldState(x=0), {"x": 2}, time_budget=3600.0)
+        assert result.plan is None
+        assert "No valid plan" in result.message
+        assert planner.stats.budget_exhausted is False
+
+    def test_budget_wins_tie_deterministically(self):
+        """Both bounds would fire in one iteration: the deadline is checked first."""
+        planner = Planner(
+            actions_list=[
+                ("step1", {"x": 0}, {"x": 1}, 1.0),
+                ("step2", {"x": 1}, {"x": 2}, 1.0),
+            ],
+            verbose=False,
+            max_iterations=1,
+        )
+        result = planner.generate_plan(WorldState(x=0), {"x": 2}, time_budget=1e-9)
+        assert result.plan is None
+        assert planner.stats.budget_exhausted is True
+        assert "budget" in result.message.lower()
+
+    def test_goal_satisfied_records_limit_without_exhaustion(self):
+        planner = Planner(actions_list=[], verbose=False)
+        result = planner.generate_plan(WorldState(x=1), {"x": 1}, time_budget=0.05)
+        assert result.plan == []
+        assert planner.stats.budget_exhausted is False
+        assert planner.stats.budget_limit == 0.05
+
+    def test_inf_budget_behaves_as_unlimited(self):
+        planner = self._deep_chain_planner(depth=5)
+        result = planner.generate_plan(
+            WorldState(x=0), {"x": 5}, time_budget=float("inf")
+        )
+        assert result.plan == [f"step{i}" for i in range(5)]
+        assert planner.stats.budget_exhausted is False
+
+    def test_budget_hooks_fire_in_order_with_stats_kwarg(self):
+        """on_search_failed fires, then on_budget_exhausted, both with stats= only."""
+        planner = self._deep_chain_planner()
+        calls = []
+
+        def record(name):
+            def cb(**kwargs):
+                calls.append((name, kwargs))
+
+            return cb
+
+        planner.register_hook("on_search_failed", record("failed"))
+        planner.register_hook("on_budget_exhausted", record("budget"))
+        planner.generate_plan(WorldState(x=0), {"x": 200}, time_budget=1e-6)
+
+        assert [name for name, _ in calls] == ["failed", "budget"]
+        for _, kwargs in calls:
+            assert kwargs == {"stats": planner.stats}
+        assert planner.stats.budget_exhausted is True
+
+    def test_budget_hook_registered_by_default_as_noop(self):
+        planner = Planner(actions_list=[], verbose=False)
+        assert "on_budget_exhausted" in planner.hooks
+        assert planner.hooks["on_budget_exhausted"] == []
+
+    def test_unknown_budget_hook_name_raises(self):
+        planner = Planner(actions_list=[], verbose=False)
+        with pytest.raises(ValueError):
+            planner.register_hook("on_budget_exhaust", lambda stats: None)
+
+    def test_continue_plan_honors_budget(self):
+        planner = self._deep_chain_planner()
+        result = planner.continue_plan(
+            WorldState(x=0), {"x": 200}, executed_actions=[], time_budget=1e-6
+        )
+        assert result.plan is None
+        assert "budget" in result.message.lower()
+        assert planner.stats.budget_exhausted is True
+        assert planner.stats.budget_limit == 1e-6
+
+    async def test_async_generate_plan_honors_budget(self):
+        planner = self._deep_chain_planner()
+        result = await planner.async_generate_plan(
+            WorldState(x=0), {"x": 200}, time_budget=1e-6
+        )
+        assert result.plan is None
+        assert "budget" in result.message.lower()
+        assert planner.stats.budget_exhausted is True
+        assert planner.stats.budget_limit == 1e-6
+
+    def test_get_action_returns_action_or_none(self):
+        planner = Planner(
+            actions_list=[("pickup_key", {}, {"has_key": True}, 1.0)], verbose=False
+        )
+        state = WorldState()
+        action = planner.get_action("pickup_key", state)
+        assert isinstance(action, Action)
+        assert action.name == "pickup_key"
+        assert planner.get_action("missing", state) is None
+
+    def test_get_action_goal_keyword_optional(self):
+        planner = Planner(
+            actions_list=[("pickup_key", {}, {"has_key": True}, 1.0)], verbose=False
+        )
+        state = WorldState()
+        goal = Goal(target_state={"has_key": True})
+        assert planner.get_action("pickup_key", state).name == "pickup_key"
+        assert planner.get_action("pickup_key", state, goal=goal).name == "pickup_key"

@@ -113,3 +113,10 @@ no network — for tests and `--demo` runs. See
         show_source: false
         show_bases: false
         inherited_members: false
+
+::: goapauto.models.jev.JevJudge
+    options:
+        show_root_heading: true
+        show_source: false
+        show_bases: false
+        inherited_members: false

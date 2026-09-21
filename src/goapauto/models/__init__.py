@@ -30,6 +30,23 @@ from goapauto.models.goap_planner import (
     Schedule,
     ScheduleStep,
 )
+from goapauto.models.judgment import (
+    Answer,
+    ChoiceAnswer,
+    ChoiceQuestion,
+    FloatAnswer,
+    Judge,
+    JudgmentCallRecord,
+    JudgmentError,
+    JudgmentGoalStrategy,
+    JudgmentResponse,
+    JudgmentSensor,
+    JudgmentStats,
+    NoulQuestion,
+    Question,
+    ScoreQuestion,
+    TokenUsage,
+)
 from goapauto.models.node import Node
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
@@ -37,7 +54,7 @@ from goapauto.models.worldstate import WorldState
 # Jev symbols are lazy: typesafe-sdk is an optional extra ("goapauto[jev]"),
 # so importing this package must not fail when it is missing. PEP 562.
 _JEV_ATTRS = frozenset(
-    {"JevSensor", "JevGoalStrategy", "TypeSafeClient", "TypeSafeError"}
+    {"JevSensor", "JevGoalStrategy", "JevJudge", "TypeSafeClient", "TypeSafeError"}
 )
 
 
@@ -69,8 +86,24 @@ __all__ = [
     "WorldState",
     "Sensor",
     "SensorManager",
+    "NoulQuestion",
+    "ChoiceQuestion",
+    "ScoreQuestion",
+    "Question",
+    "FloatAnswer",
+    "ChoiceAnswer",
+    "Answer",
+    "TokenUsage",
+    "JudgmentResponse",
+    "Judge",
+    "JudgmentError",
+    "JudgmentCallRecord",
+    "JudgmentStats",
+    "JudgmentSensor",
+    "JudgmentGoalStrategy",
     "JevSensor",
     "JevGoalStrategy",
+    "JevJudge",
     "TypeSafeClient",
     "TypeSafeError",
     "Unset",

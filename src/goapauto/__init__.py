@@ -52,6 +52,23 @@ from goapauto.models.actions import (
     Set,
     Unset,
 )
+from goapauto.models.caching import (
+    AsyncSensor,
+    CachePolicy,
+    CachingSensor,
+    SensorHealth,
+    SensorReport,
+    Staleness,
+    StalePolicy,
+    ValueMeta,
+    max_age,
+    oldest_staleness,
+)
+from goapauto.models.execution import (
+    InterruptSource,
+    PlanExecution,
+    PlanInterruptedError,
+)
 from goapauto.models.goal import Goal
 from goapauto.models.goal_arbitrator import (
     GoalArbitrator,
@@ -67,11 +84,30 @@ from goapauto.models.goap_planner import (
     Schedule,
     ScheduleStep,
 )
+from goapauto.models.judgment import (
+    Answer,
+    ChoiceAnswer,
+    ChoiceQuestion,
+    FloatAnswer,
+    Judge,
+    JudgmentCallRecord,
+    JudgmentError,
+    JudgmentGoalStrategy,
+    JudgmentResponse,
+    JudgmentSensor,
+    JudgmentStats,
+    NoulQuestion,
+    Question,
+    ScoreQuestion,
+    TokenUsage,
+)
+from goapauto.models.replan import ReplanDecision, ReplanPolicy, ReplanReason
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
+from goapauto.utils.inspector import AgentInspector, EventType, TraceEvent
 from goapauto.utils.visualizer import SearchTreeVisualizer
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # Jev symbols are lazy: typesafe-sdk is an optional extra ("goapauto[jev]"),
 # so importing them must not fail at package import time. PEP 562.
@@ -79,9 +115,11 @@ _JEV_ATTRS = frozenset(
     {
         "JevSensor",
         "JevGoalStrategy",
+        "JevJudge",
         "JevClient",
         "JevCallRecord",
         "JevStats",
+        "GateDecision",
         "shared_client",
         "TypeSafeClient",
         "TypeSafeError",
@@ -106,6 +144,9 @@ __all__ = [
     "PlanResult",
     "PlanStats",
     "PlanExecutionError",
+    "PlanExecution",
+    "PlanInterruptedError",
+    "InterruptSource",
     "Plan",
     "Schedule",
     "ScheduleStep",
@@ -116,14 +157,47 @@ __all__ = [
     "PriorityGoalStrategy",
     "ActionProvider",
     "StaticActionProvider",
+    "NoulQuestion",
+    "ChoiceQuestion",
+    "ScoreQuestion",
+    "Question",
+    "FloatAnswer",
+    "ChoiceAnswer",
+    "Answer",
+    "TokenUsage",
+    "JudgmentResponse",
+    "Judge",
+    "JudgmentError",
+    "JudgmentCallRecord",
+    "JudgmentStats",
+    "JudgmentSensor",
+    "JudgmentGoalStrategy",
+    "CachePolicy",
+    "CachingSensor",
+    "StalePolicy",
+    "Staleness",
+    "ValueMeta",
+    "SensorReport",
+    "SensorHealth",
+    "AsyncSensor",
+    "max_age",
+    "oldest_staleness",
+    "ReplanPolicy",
+    "ReplanDecision",
+    "ReplanReason",
     "JevSensor",
     "JevGoalStrategy",
+    "JevJudge",
     "JevClient",
     "JevCallRecord",
     "JevStats",
+    "GateDecision",
     "shared_client",
     "TypeSafeClient",
     "TypeSafeError",
+    "AgentInspector",
+    "TraceEvent",
+    "EventType",
     "SearchTreeVisualizer",
     "Unset",
     "Delete",
