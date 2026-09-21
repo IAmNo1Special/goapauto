@@ -100,7 +100,11 @@ class TestSyncNonPreemption:
         # The in-flight handler was not preempted: it ran to completion and
         # the interrupt was honored at the next action boundary.
         assert completed == ["step1"]
-        assert time.monotonic() - started >= 0.3
+        # The run waited for the 0.3s handler, not the 0.05s watchdog
+        # interrupt. The threshold sits well below the handler duration so
+        # coarse platform timers (Windows ~15.6ms) cannot flake it, and well
+        # above the watchdog delay so an early return still fails loudly.
+        assert time.monotonic() - started >= 0.25
         assert exc_info.value.executed_actions == ["step1"]
         assert exc_info.value.source == "watchdog"
 

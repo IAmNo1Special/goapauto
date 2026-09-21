@@ -1010,8 +1010,21 @@ class TestTimeBudget:
         assert "No valid plan" in result.message
         assert planner.stats.budget_exhausted is False
 
-    def test_budget_wins_tie_deterministically(self):
+    def test_budget_wins_tie_deterministically(self, monkeypatch):
         """Both bounds would fire in one iteration: the deadline is checked first."""
+        import time as _time
+
+        # Scripted clock: the deadline is computed from the first reading;
+        # every later reading is already past it. A 1ns budget against a
+        # real clock is meaningless on coarse timers (Windows ~15.6ms), so
+        # the ordering property is pinned against a deterministic clock.
+        calls = {"n": 0}
+
+        def fake_monotonic() -> float:
+            calls["n"] += 1
+            return 1000.0 if calls["n"] == 1 else 2000.0
+
+        monkeypatch.setattr(_time, "monotonic", fake_monotonic)
         planner = Planner(
             actions_list=[
                 ("step1", {"x": 0}, {"x": 1}, 1.0),

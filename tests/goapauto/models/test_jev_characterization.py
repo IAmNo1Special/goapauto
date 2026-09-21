@@ -164,8 +164,21 @@ def test_jev_goal_strategy_double_close_idempotent(mocker):
     strategy.close()
 
 
-def test_jev_sensor_stats_count_every_attempted_call(mocker):
+def test_jev_sensor_stats_count_every_attempted_call(mocker, monkeypatch):
     """calls/errors count every attempted call, on every failure-table row."""
+    import time as _time
+
+    # Scripted clock: each reading advances 1ms, so ages are always
+    # positive. With max_stale=0.0 the failed re-judges must serve nothing.
+    # Against a real clock this depends on sub-tick resolution, which
+    # Windows (~15.6ms granularity) does not provide.
+    ticks = {"n": 0}
+
+    def fake_monotonic() -> float:
+        ticks["n"] += 1
+        return 1000.0 + 0.001 * ticks["n"]
+
+    monkeypatch.setattr(_time, "monotonic", fake_monotonic)
     records = []
     api = mocker.Mock()
     api.system_one.side_effect = [
