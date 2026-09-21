@@ -235,11 +235,6 @@ class JudgmentSensor(Sensor):
     ``last_report()`` expose the per-key provenance; ``name`` labels the
     sensor in reports; ``observation_fingerprint`` is an optional
     change-detector used instead of raw observation comparison.
-
-    ``fail_loud=False`` exists strictly as legacy compatibility for the
-    Jev-backed sensor, which absorbed provider failures into its stale-cache
-    policy. It is not a normal policy choice: new code should leave the
-    default ``fail_loud=True`` and handle ``JudgmentError`` itself.
     """
 
     def __init__(
@@ -252,7 +247,6 @@ class JudgmentSensor(Sensor):
         resense_on_change: bool = True,
         max_stale: float = 30.0,
         telemetry: Callable[[JudgmentCallRecord], None] | None = None,
-        fail_loud: bool = True,
         stale_after: float | None = None,
         stale_policy: StalePolicy = StalePolicy.KEEP_FLAGGED,
         name: str | None = None,
@@ -293,7 +287,6 @@ class JudgmentSensor(Sensor):
         self._policy = policy
         self._min_interval = min_interval
         self._resense_on_change = resense_on_change
-        self._fail_loud = fail_loud
         self._telemetry = telemetry
         # Shared per-key cache engine (design 02 §3.3): successful reads
         # refresh the keys they report; absent keys keep value and age.
@@ -409,7 +402,7 @@ class JudgmentSensor(Sensor):
                 stale_cache_hits=self._stats.stale_cache_hits,
             )
             self._last_error = type(exc).__name__
-            if not exc.retryable and self._fail_loud:
+            if not exc.retryable:
                 self._record_telemetry(latency_ms, exc, stale_cache_hit=False)
                 raise
             report = self._absorb_report(exc, name)
@@ -442,38 +435,25 @@ class JudgmentSensor(Sensor):
         return report
 
     def _absorb_report(self, exc: JudgmentError, name: str) -> SensorReport | None:
-        """Degrade a JudgmentError to a cached report or None.
+        """Degrade a retryable JudgmentError to a cached report or None.
 
-        Fail-loud raises before this is reached.
+        Non-retryable errors raise before this is reached.
         """
         now = time.monotonic()
-        if exc.retryable:
-            report = self._serve_failure(now, name)
-            if report is not None:
-                logger.warning(
-                    "Judgment failed with retryable error; reusing stale cache: %s",
-                    exc,
-                )
-                self._stats = JudgmentStats(
-                    calls=self._stats.calls,
-                    errors=self._stats.errors,
-                    stale_cache_hits=self._stats.stale_cache_hits + 1,
-                )
-                return report
-            logger.error(
-                "Judgment failed with retryable error; no stale cache: %s", exc
-            )
-            return None
-        logger.error("Judgment failed (fail_loud=False legacy absorption): %s", exc)
         report = self._serve_failure(now, name)
         if report is not None:
-            logger.warning("Reusing stale cache after judgment failure.")
+            logger.warning(
+                "Judgment failed with retryable error; reusing stale cache: %s",
+                exc,
+            )
             self._stats = JudgmentStats(
                 calls=self._stats.calls,
                 errors=self._stats.errors,
                 stale_cache_hits=self._stats.stale_cache_hits + 1,
             )
-        return report
+            return report
+        logger.error("Judgment failed with retryable error; no stale cache: %s", exc)
+        return None
 
     def _serve_failure(self, now: float, name: str) -> SensorReport | None:
         """Failure-path serve: cached view within policy, else None."""
@@ -617,10 +597,8 @@ def _error_name(error: JudgmentError | None) -> str | None:
 class JudgmentGoalStrategy:
     """Pick a goal by asking any ``Judge`` backend one Choice question.
 
-    ``fail_loud=False`` exists strictly as legacy compatibility for the
-    Jev-backed strategy, which absorbed provider failures into a first-goal
-    fallback. It is not a normal policy choice: new code should leave the
-    default ``fail_loud=True`` and handle ``JudgmentError`` itself.
+    Retryable failures warn and fall back to the first goal; non-retryable
+    failures re-raise ``JudgmentError``.
     """
 
     def __init__(
@@ -628,7 +606,6 @@ class JudgmentGoalStrategy:
         judge: Judge,
         instructions: str = "Which goal should the agent pursue next?",
         telemetry: Callable[[JudgmentCallRecord], None] | None = None,
-        fail_loud: bool = True,
     ) -> None:
         if judge is None:
             raise TypeError(
@@ -636,7 +613,6 @@ class JudgmentGoalStrategy:
             )
         self._judge = judge
         self._instructions = instructions
-        self._fail_loud = fail_loud
         self._telemetry = telemetry
         self._stats = JudgmentStats()
 
@@ -697,14 +673,7 @@ class JudgmentGoalStrategy:
                     exc,
                 )
                 return goals[0]
-            if self._fail_loud:
-                raise
-            logger.error(
-                "Goal judgment failed (fail_loud=False legacy absorption); "
-                "falling back to first goal: %s",
-                exc,
-            )
-            return goals[0]
+            raise
         latency_ms = (time.monotonic() - start) * 1000.0
         self._record_telemetry(latency_ms, None, usage=response.usage)
         if label not in labels:

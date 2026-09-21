@@ -59,9 +59,7 @@ A `Sensor` over any `Judge`, with the same cache/staleness/telemetry
 contract as `JevSensor`: re-judges on a changed observation (when
 `resense_on_change`) or an elapsed `min_interval`; absorbs retryable
 failures into the stale-cache path (`max_stale=0` disables reuse);
-re-raises non-retryable failures under the default `fail_loud=True`.
-`fail_loud=False` reproduces the legacy absorb-everything policy and
-exists only for that compatibility.
+re-raises non-retryable failures.
 
 ```python
 from goapauto import JudgmentSensor
@@ -83,8 +81,7 @@ instance. Not thread-safe: one instance per thread.
 
 Asks the judge one `Choice` question over the goal names and returns the
 chosen goal. On retryable failure (or an unknown label) it warns and falls
-back to the first goal; on non-retryable failure it re-raises under
-`fail_loud=True`.
+back to the first goal; on non-retryable failure it re-raises `JudgmentError`.
 
 ```python
 from goapauto import Goal, GoalArbitrator, JudgmentGoalStrategy

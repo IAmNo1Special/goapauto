@@ -107,7 +107,7 @@ from goapauto.models.worldstate import WorldState
 from goapauto.utils.inspector import AgentInspector, EventType, TraceEvent
 from goapauto.utils.visualizer import SearchTreeVisualizer
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 # Jev symbols are lazy: typesafe-sdk is an optional extra ("goapauto[jev]"),
 # so importing them must not fail at package import time. PEP 562.

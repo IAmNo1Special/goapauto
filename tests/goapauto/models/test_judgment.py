@@ -904,7 +904,7 @@ class TestJudgmentSensorErrors:
         assert (stats.calls, stats.errors) == (1, 1)
 
     @pytest.mark.parametrize("arm_name", ["jev", "fake"])
-    def test_non_retryable_propagates_when_fail_loud(self, arm_name):
+    def test_non_retryable_propagates(self, arm_name):
         records = []
         failure = JudgmentError("bad contract", backend=arm_name, retryable=False)
         judge = _responder_judge(arm_name, failure)
@@ -920,47 +920,6 @@ class TestJudgmentSensorErrors:
         assert records[0].error == "JudgmentError"
         stats = sensor.stats()
         assert (stats.calls, stats.errors) == (1, 1)
-
-    @pytest.mark.parametrize("arm_name", ["jev", "fake"])
-    def test_non_retryable_absorbed_when_fail_quiet(self, arm_name, caplog):
-        judge = _responder_judge(
-            arm_name, JudgmentError("bad contract", backend=arm_name, retryable=False)
-        )
-        sensor = JudgmentSensor(
-            judge,
-            observe=lambda: {},
-            questions=core_questions(),
-            max_stale=30.0,
-            fail_loud=False,
-        )
-        with caplog.at_level(logging.ERROR, logger="goapauto.models.judgment"):
-            assert sensor.sense() == {}
-        assert "fail_loud=False" in caplog.text
-
-    @pytest.mark.parametrize("arm_name", ["jev", "fake"])
-    def test_non_retryable_reuses_fresh_cache_when_fail_quiet(self, arm_name, caplog):
-        arm = ARMS[arm_name]
-        judge = _responder_judge(
-            arm_name, JudgmentError("bad contract", backend=arm_name, retryable=False)
-        )
-        sensor = JudgmentSensor(
-            judge,
-            observe=lambda: arm.obs_a,
-            questions=core_questions(),
-            max_stale=30.0,
-            min_interval=0.0,
-            fail_loud=False,
-        )
-        # Prime the cache with a working judge first.
-        working, _ = arm.make_judge()
-        sensor._judge = working
-        sensor.sense()
-        sensor._judge = judge
-        with caplog.at_level(logging.WARNING, logger="goapauto.models.judgment"):
-            assert sensor.sense() == arm.expected_a
-        assert "Reusing stale cache after judgment failure" in caplog.text
-        stats = sensor.stats()
-        assert (stats.calls, stats.errors, stats.stale_cache_hits) == (2, 1, 1)
 
     @pytest.mark.parametrize("arm_name", ["jev", "fake"])
     def test_expired_cache_not_reused(self, arm_name, caplog, monkeypatch):
@@ -1030,7 +989,7 @@ class TestJudgmentSensorErrors:
             sensor.sense()
         assert records[0].error == "ValueError"
 
-    def test_rule_judge_negative_propagates_fail_loud(self):
+    def test_rule_judge_negative_propagates(self):
         judge = RuleJudge({})
         sensor = JudgmentSensor(
             judge, observe=lambda: {"t": "nothing"}, questions=core_questions()
@@ -1039,16 +998,6 @@ class TestJudgmentSensorErrors:
             sensor.sense()
         assert exc_info.value.backend == "rule"
         assert exc_info.value.retryable is False
-
-    def test_rule_judge_negative_absorbed_fail_quiet(self):
-        judge = RuleJudge({})
-        sensor = JudgmentSensor(
-            judge,
-            observe=lambda: {"t": "nothing"},
-            questions=core_questions(),
-            fail_loud=False,
-        )
-        assert sensor.sense() == {}
 
     def test_telemetry_callback_exception_swallowed(self, caplog):
         def bad_telemetry(record):
@@ -1142,7 +1091,7 @@ class TestJudgmentGoalStrategy:
             assert strategy.select(goals, WorldState()) is goals[0]
         assert "unknown goal" in caplog.text.lower()
 
-    def test_non_retryable_propagates_when_fail_loud(self):
+    def test_non_retryable_propagates(self):
         records = []
         failure = JudgmentError("bad", backend="fake", retryable=False)
 
@@ -1158,14 +1107,6 @@ class TestJudgmentGoalStrategy:
         assert records[0].source == "strategy"
         assert records[0].error == "JudgmentError"
         assert records[0].backend == "fake"
-
-    def test_non_retryable_absorbed_when_fail_quiet(self):
-        def responder(state, questions):
-            raise JudgmentError("bad", backend="fake", retryable=False)
-
-        strategy = JudgmentGoalStrategy(FakeJudge(responder=responder), fail_loud=False)
-        goals = make_goals()
-        assert strategy.select(goals, WorldState()) is goals[0]
 
     def test_non_judgment_error_propagates_unchanged(self):
         boom = RuntimeError("boom")

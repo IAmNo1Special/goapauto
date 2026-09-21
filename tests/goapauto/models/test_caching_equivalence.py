@@ -361,7 +361,6 @@ _JEV_CONFIGS = [
 ]
 _JUDGE_CONFIGS = [
     {},
-    {"fail_loud": False},
     {"min_interval": 60.0, "max_stale": 30.0},
     {"max_stale": 0.0},
 ]

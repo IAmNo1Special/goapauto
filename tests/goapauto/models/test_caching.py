@@ -109,7 +109,7 @@ def make_judgment_sensor(**kwargs):
                     backend=self.backend,
                     usage=TokenUsage(input_tokens=1, output_tokens=1),
                 )
-            raise JudgmentError("boom", backend=self.backend, retryable=False)
+            raise JudgmentError("boom", backend=self.backend, retryable=True)
 
         def close(self) -> None:
             pass
@@ -905,9 +905,7 @@ class TestJudgmentSensorCacheSurface:
         assert health.error is None
 
     def test_opt_in_ladder_on_failure(self, clock):
-        sensor, judge = make_judgment_sensor(
-            stale_after=5.0, max_stale=30.0, fail_loud=False
-        )
+        sensor, judge = make_judgment_sensor(stale_after=5.0, max_stale=30.0)
         sensor.sense()
         judge.behavior = "fail"
         clock[0] += 10.0
@@ -1041,7 +1039,7 @@ class TestUpdateStateDetailed:
         # No half-merged state: the good sensor's values were not written.
         assert state.to_dict() == {}
 
-    def test_update_state_still_fail_loud(self):
+    def test_update_state_propagates_error(self):
         bad = ScriptedSensor({"b": 2})
         bad.failure = RuntimeError("boom")
         manager = SensorManager([bad])
