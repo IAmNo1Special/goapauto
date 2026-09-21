@@ -35,6 +35,8 @@ Example usage:
     >>> result = planner.generate_plan(state, goal)
 """
 
+from typing import Any
+
 from goapauto.models.action_provider import ActionProvider, StaticActionProvider
 from goapauto.models.actions import (
     Action,
@@ -65,17 +67,35 @@ from goapauto.models.goap_planner import (
     Schedule,
     ScheduleStep,
 )
-from goapauto.models.jev import (
-    JevGoalStrategy,
-    JevSensor,
-    TypeSafeClient,
-    TypeSafeError,
-)
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
 from goapauto.utils.visualizer import SearchTreeVisualizer
 
 __version__ = "0.4.0"
+
+# Jev symbols are lazy: typesafe-sdk is an optional extra ("goapauto[jev]"),
+# so importing them must not fail at package import time. PEP 562.
+_JEV_ATTRS = frozenset(
+    {
+        "JevSensor",
+        "JevGoalStrategy",
+        "JevClient",
+        "JevCallRecord",
+        "JevStats",
+        "shared_client",
+        "TypeSafeClient",
+        "TypeSafeError",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    if name in _JEV_ATTRS:
+        from goapauto.models import jev
+
+        return getattr(jev, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Planner",
@@ -98,6 +118,10 @@ __all__ = [
     "StaticActionProvider",
     "JevSensor",
     "JevGoalStrategy",
+    "JevClient",
+    "JevCallRecord",
+    "JevStats",
+    "shared_client",
     "TypeSafeClient",
     "TypeSafeError",
     "SearchTreeVisualizer",

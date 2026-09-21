@@ -19,6 +19,7 @@ from goapauto.models.jev import (
     JevSensor,
     _json_safe,
     _require_response,
+    shared_client,
 )
 from goapauto.models.sensors import SensorManager
 from goapauto.models.worldstate import WorldState
@@ -566,3 +567,278 @@ class TestClientLifecycle:
         strategy = JevGoalStrategy(client=client)
         strategy.close()
         client.close.assert_not_called()
+
+
+class TestJevSensorJudge:
+    def test_judge_matches_sense(self, mocker):
+        api = mocker.Mock()
+        api.system_one.return_value = sdk_response()
+        sensor = JevSensor(
+            observe=lambda: {"stale": True}, questions=sdk_questions(), client=api
+        )
+        observation = {"enemies_nearby": 3, "health": 20}
+
+        assert sensor.judge(observation) == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
+        api.system_one.assert_called_once_with(observation, sensor._questions)
+
+    def test_judge_caches_like_sense(self, mocker):
+        api = mocker.Mock()
+        api.system_one.return_value = sdk_response()
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            min_interval=60.0,
+        )
+        observation = {"enemies_nearby": 3}
+        sensor.judge(observation)
+        sensor.judge(observation)
+        assert api.system_one.call_count == 1
+
+    def test_judge_rejudges_on_change(self, mocker):
+        api = mocker.Mock()
+        api.system_one.return_value = sdk_response()
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            min_interval=60.0,
+        )
+        sensor.judge({"a": 1})
+        sensor.judge({"a": 2})
+        assert api.system_one.call_count == 2
+
+    def test_judge_interval_elapsed_rejudges(self, mocker):
+        now = [1000.0]
+        mocker.patch("time.monotonic", side_effect=lambda: now[0])
+        api = mocker.Mock()
+        api.system_one.return_value = sdk_response()
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            min_interval=60.0,
+        )
+        sensor.judge({"a": 1})
+        now[0] += 61.0
+        sensor.judge({"a": 1})
+        assert api.system_one.call_count == 2
+
+    def test_sense_and_judge_share_cache(self, mocker):
+        """sense() and judge() use one cache; the same observation reuses it."""
+        api = mocker.Mock()
+        api.system_one.return_value = sdk_response()
+        observation = {"enemies_nearby": 3}
+        sensor = JevSensor(
+            observe=lambda: observation,
+            questions=sdk_questions(),
+            client=api,
+            min_interval=60.0,
+        )
+        sensor.sense()
+        assert sensor.judge(observation) == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
+        assert api.system_one.call_count == 1
+
+    def test_judge_failure_uses_stale_cache(self, mocker):
+        api = mocker.Mock()
+        api.system_one.side_effect = [sdk_response(), TypeSafeError("boom")]
+        sensor = JevSensor(
+            observe=lambda: {}, questions=sdk_questions(), client=api, max_stale=30.0
+        )
+        sensor.judge({"a": 1})
+        assert sensor.judge({"a": 2}) == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
+
+    def test_judge_failure_dead_cache_returns_empty(self, mocker):
+        api = mocker.Mock()
+        api.system_one.side_effect = TypeSafeError("boom")
+        sensor = JevSensor(
+            observe=lambda: {}, questions=sdk_questions(), client=api, max_stale=0.0
+        )
+        assert sensor.judge({"a": 1}) == {}
+
+
+class TestJevTelemetry:
+    def test_sensor_records_success(self, mocker):
+        records = []
+        api = mocker.Mock()
+        api.system_one.return_value = sdk_response()
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            telemetry=records.append,
+        )
+        sensor.sense()
+
+        assert len(records) == 1
+        record = records[0]
+        assert record.source == "sensor"
+        assert record.latency_ms >= 0.0
+        assert record.input_tokens == 10
+        assert record.output_tokens == 2
+        assert record.error is None
+        assert record.stale_cache_hit is False
+
+    def test_sensor_records_failure_with_stale_hit(self, mocker):
+        records = []
+        api = mocker.Mock()
+        api.system_one.side_effect = [sdk_response(), TypeSafeError("boom")]
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            max_stale=30.0,
+            telemetry=records.append,
+        )
+        sensor.sense()
+        sensor.sense()
+
+        assert len(records) == 2
+        assert records[1].error == "TypeSafeError"
+        assert records[1].stale_cache_hit is True
+        assert records[1].input_tokens is None
+
+    def test_sensor_records_failure_dead_cache(self, mocker):
+        records = []
+        api = mocker.Mock()
+        api.system_one.side_effect = TypeSafeError("boom")
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            max_stale=0.0,
+            telemetry=records.append,
+        )
+        assert sensor.sense() == {}
+        assert records[0].error == "TypeSafeError"
+        assert records[0].stale_cache_hit is False
+
+    def test_sensor_stats_aggregate(self, mocker):
+        api = mocker.Mock()
+        api.system_one.side_effect = [sdk_response(), TypeSafeError("boom")]
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            max_stale=30.0,
+        )
+        assert sensor.stats().calls == 0
+        sensor.sense()
+        sensor.sense()
+        stats = sensor.stats()
+        assert stats.calls == 2
+        assert stats.errors == 1
+        assert stats.stale_cache_hits == 1
+        assert stats.total_latency_ms >= 0.0
+
+    def test_sensor_telemetry_callback_exception_ignored(self, mocker, caplog):
+        def bad(record):
+            raise RuntimeError("telemetry blew up")
+
+        api = mocker.Mock()
+        api.system_one.return_value = sdk_response()
+        sensor = JevSensor(
+            observe=lambda: {},
+            questions=sdk_questions(),
+            client=api,
+            telemetry=bad,
+        )
+        assert sensor.sense() == {
+            "danger": 0.87,
+            "threat": "hunting",
+            "hunger": 2.0,
+        }
+        assert "telemetry callback raised" in caplog.text
+        assert sensor.stats().calls == 1
+
+    def test_strategy_records_success(self, mocker):
+        records = []
+        api = mocker.Mock()
+        api.system_one.return_value = goal_response("Rest")
+        goals = [
+            Goal(name="Rest", target_state={"rested": True}),
+            Goal(name="Eat", target_state={"fed": True}),
+        ]
+        strategy = JevGoalStrategy(client=api, telemetry=records.append)
+        assert strategy.select(goals, WorldState()) is goals[0]
+
+        assert len(records) == 1
+        record = records[0]
+        assert record.source == "strategy"
+        assert record.latency_ms >= 0.0
+        assert record.input_tokens == 10
+        assert record.output_tokens == 2
+        assert record.error is None
+        assert record.stale_cache_hit is False
+
+    def test_strategy_records_failure(self, mocker):
+        records = []
+        api = mocker.Mock()
+        api.system_one.side_effect = TypeSafeError("boom")
+        goals = [
+            Goal(name="Rest", target_state={"rested": True}),
+            Goal(name="Eat", target_state={"fed": True}),
+        ]
+        strategy = JevGoalStrategy(client=api, telemetry=records.append)
+        assert strategy.select(goals, WorldState()) is goals[0]
+
+        assert records[0].error == "TypeSafeError"
+        stats = strategy.stats()
+        assert stats.calls == 1
+        assert stats.errors == 1
+
+    def test_strategy_telemetry_callback_exception_ignored(self, mocker, caplog):
+        def bad(record):
+            raise RuntimeError("telemetry blew up")
+
+        api = mocker.Mock()
+        api.system_one.return_value = goal_response("Rest")
+        goals = [Goal(name="Rest", target_state={"rested": True})]
+        strategy = JevGoalStrategy(client=api, telemetry=bad)
+        assert strategy.select(goals, WorldState()) is goals[0]
+        assert "telemetry callback raised" in caplog.text
+
+
+class TestSharedClient:
+    def test_shared_client_closes_on_exit(self, mocker):
+        client_cls = mocker.patch("goapauto.models.jev.TypeSafeClient")
+        with shared_client(timeout=8.0) as client:
+            assert client is client_cls.return_value
+        client_cls.assert_called_once_with(timeout=8.0)
+        client_cls.return_value.close.assert_called_once_with()
+
+    def test_shared_client_closes_on_exception(self, mocker):
+        client_cls = mocker.patch("goapauto.models.jev.TypeSafeClient")
+        with pytest.raises(RuntimeError, match="boom"):
+            with shared_client():
+                raise RuntimeError("boom")
+        client_cls.return_value.close.assert_called_once_with()
+
+    def test_shared_client_feeds_sensor_and_strategy(self, mocker):
+        client_cls = mocker.patch("goapauto.models.jev.TypeSafeClient")
+        client_cls.return_value.system_one.return_value = sdk_response()
+        with shared_client() as client:
+            sensor = JevSensor(
+                observe=lambda: {}, questions=sdk_questions(), client=client
+            )
+            strategy = JevGoalStrategy(client=client)
+            sensor.sense()
+            assert (
+                strategy.select(
+                    [Goal(name="Rest", target_state={"rested": True})], WorldState()
+                )
+                is not None
+            )
+        client_cls.return_value.close.assert_called_once_with()

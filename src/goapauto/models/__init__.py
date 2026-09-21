@@ -1,3 +1,5 @@
+from typing import Any
+
 from goapauto.models.action_provider import ActionProvider, StaticActionProvider
 from goapauto.models.actions import (
     Action,
@@ -28,15 +30,24 @@ from goapauto.models.goap_planner import (
     Schedule,
     ScheduleStep,
 )
-from goapauto.models.jev import (
-    JevGoalStrategy,
-    JevSensor,
-    TypeSafeClient,
-    TypeSafeError,
-)
 from goapauto.models.node import Node
 from goapauto.models.sensors import Sensor, SensorManager
 from goapauto.models.worldstate import WorldState
+
+# Jev symbols are lazy: typesafe-sdk is an optional extra ("goapauto[jev]"),
+# so importing this package must not fail when it is missing. PEP 562.
+_JEV_ATTRS = frozenset(
+    {"JevSensor", "JevGoalStrategy", "TypeSafeClient", "TypeSafeError"}
+)
+
+
+def __getattr__(name: str) -> Any:
+    if name in _JEV_ATTRS:
+        from goapauto.models import jev
+
+        return getattr(jev, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Action",

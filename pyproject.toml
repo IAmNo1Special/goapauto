@@ -9,6 +9,10 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.12.5",
+]
+
+[project.optional-dependencies]
+jev = [
     "typesafe-sdk>=0.7.0",
 ]
 
@@ -30,6 +34,8 @@ dev = [
     "mdformat>=0.7.22",
     "mdformat-mkdocs>=5.1.0",
     "mdformat-front-matters>=2.0.0",
+    # Needed to run the Jev test-suite; the published package keeps it optional.
+    "typesafe-sdk>=0.7.0",
 ]
 
 [tool.ruff]

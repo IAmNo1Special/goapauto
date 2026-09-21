@@ -28,8 +28,8 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 
 ```bash
 uv add goapauto
-# or
-uv add goapauto
+# with Jev (TypeSafe) judgment support:
+uv add "goapauto[jev]"
 ```
 
 ## ⚡ Quick Start
