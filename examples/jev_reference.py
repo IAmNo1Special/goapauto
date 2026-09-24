@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _env import load_dotenv  # noqa: E402
+from typesafe_sdk import Noul, Score  # noqa: E402
 
 from goapauto import (  # noqa: E402
     Goal,
@@ -29,7 +30,6 @@ from goapauto import (  # noqa: E402
     shared_client,
 )
 from goapauto.testing import FakeTypeSafeClient  # noqa: E402
-from typesafe_sdk import Noul, Score  # noqa: E402
 
 load_dotenv()  # repo-root .env -> os.environ (exported vars win)
 

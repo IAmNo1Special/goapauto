@@ -9,7 +9,7 @@ for planning an optimal morning routine based on different constraints and goals
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 # Add the parent directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -32,7 +32,7 @@ def get_initial_state() -> WorldState:
     )
 
 
-def get_actions_list() -> List[Tuple[str, Dict[str, Any], Dict[str, Any], float]]:
+def get_actions_list() -> list[tuple[str, dict[str, Any], dict[str, Any], float]]:
     """Define the available routine actions."""
 
     return [
