@@ -37,7 +37,11 @@ Example usage:
 
 from typing import Any
 
-from goapauto.models.action_provider import ActionProvider, StaticActionProvider
+from goapauto.models.action_provider import (
+    ActionProvider,
+    FunctionActionProvider,
+    StaticActionProvider,
+)
 from goapauto.models.actions import (
     Action,
     Actions,
@@ -157,6 +161,7 @@ __all__ = [
     "PriorityGoalStrategy",
     "ActionProvider",
     "StaticActionProvider",
+    "FunctionActionProvider",
     "NoulQuestion",
     "ChoiceQuestion",
     "ScoreQuestion",
