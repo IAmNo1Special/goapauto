@@ -1,6 +1,10 @@
 from typing import Any
 
-from goapauto.models.action_provider import ActionProvider, StaticActionProvider
+from goapauto.models.action_provider import (
+    ActionProvider,
+    FunctionActionProvider,
+    StaticActionProvider,
+)
 from goapauto.models.actions import (
     Action,
     Actions,
@@ -71,6 +75,7 @@ __all__ = [
     "Actions",
     "ActionProvider",
     "StaticActionProvider",
+    "FunctionActionProvider",
     "Goal",
     "GoalArbitrator",
     "GoalSelectionStrategy",
